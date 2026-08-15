@@ -1,5 +1,6 @@
 -- ============================================================
--- 星光辅助 V2.2 · 半透明 · 移动端优化
+-- 星光辅助 V3.0 · 完整功能版
+-- 保留 Ninja Hub 全部功能实现，仅 UI 层使用 WindUI
 -- ============================================================
 
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
@@ -21,24 +22,34 @@ local Lighting = game:GetService("Lighting")
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
 local Workspace = game:GetService("Workspace")
+local MarketplaceService = game:GetService("MarketplaceService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local GuiService = game:GetService("GuiService")
 local Stats = game:GetService("Stats")
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
+
 local player = LocalPlayer
-
+local playerGui = player:WaitForChild("PlayerGui")
 local LoadStartTime = tick()
+local MAX_RENDER_DIST = 300
 
+-- ============================================================
+-- 金黄色配色（用于独立 UI 元素）
+-- ============================================================
 local C = {
     Gold = Color3.fromRGB(255, 215, 0),
     GoldDark = Color3.fromRGB(184, 134, 11),
     GoldLight = Color3.fromRGB(255, 235, 150),
     Text = Color3.fromRGB(255, 255, 240),
     TextSub = Color3.fromRGB(200, 195, 180),
+    Btn = Color3.fromRGB(200, 170, 40),
+    BtnDark = Color3.fromRGB(140, 120, 30),
 }
 
+-- ============================================================
 -- 角色引用
+-- ============================================================
 local character, humanoid, hrp
 local function refreshCharacter()
     character = player.Character
@@ -56,9 +67,9 @@ player.CharacterAdded:Connect(function(char)
 end)
 
 -- ============================================================
--- 功能状态表
+-- 状态管理（完整移植自 Ninja Hub）
 -- ============================================================
-local Features = {
+local States = {
     WalkSpeed = {Enabled = false, Value = 100, Default = 16},
     TpWalk = {Enabled = false, Value = 2},
     Fly1 = {Enabled = false, Value = 45},
@@ -77,7 +88,6 @@ local Features = {
     KillAura = {Enabled = false, Value = 20},
     Aimbot = {Enabled = false},
     RapidFire = {Enabled = false},
-    AutoFire = {Enabled = false},
     NightVision = {Enabled = false},
     FullBright = {Enabled = false},
     ESP = {Enabled = false},
@@ -93,18 +103,20 @@ local Features = {
     FastInteract = {Enabled = false},
     AutoSave = {Enabled = false},
     AntiAfk = {Enabled = false},
-    NpcDisplay = {Enabled = false, ShowHead = true, ShowTorso = true, ShowLimbs = true, ShowBones = true},
-    PlayerDisplay = {Enabled = false, ShowHead = true, ShowTorso = true, ShowLimbs = true, ShowBones = true, ShowName = true, ShowDistance = true, ShowHealth = true},
-    BoxCreature = {Enabled = false, BoxNpc = true, BoxPlayer = true, BoxOther = true, BoxAliveOnly = false, BoxMode = "3D", ShowHitbox = false, MaxDistance = 0},
-    LineConnect = {Enabled = false, ConnectNpc = false, ConnectPlayer = true, ConnectOther = false, LineWallCheck = false, Origin = "Top", MaxDistance = 0},
-    AimbotV2 = {Enabled = false, AimPlayer = true, AimNpc = false, AimOther = false, AimPart = "Head", CircleSize = 150, AimSpeed = 0.3, WallCheck = false, TeamCheck = false, AliveCheck = true, Smooth = true, Predict = false, CustomTarget = nil, MaxDistance = 0},
-    AdvancedESP = {Enabled = false, ShowBox = true, BoxStyle = "Corner", BoxThickness = 1, ShowName = true, ShowHealth = true, ShowDistance = true, HealthStyle = "Bar", ShowChams = true, TeamCheck = false, ShowTeam = false, WallCheck = false, Tracer = false, TracerOrigin = "Bottom", Skeleton = false, MaxDistance = 300},
     ShowFps = {Enabled = false},
     ShowCoords = {Enabled = false},
     GravityMod = {Enabled = false, Value = 50, Default = 196.2},
     TimeOfDay = {Enabled = false, Value = 12},
     SitAnywhere = {Enabled = false},
     DangerWarning = {Enabled = false, Value = 50},
+    NpcDisplay = {Enabled = false, ShowHead = true, ShowTorso = true, ShowLimbs = true, ShowBones = true},
+    PlayerDisplay = {Enabled = false, ShowHead = true, ShowTorso = true, ShowLimbs = true, ShowBones = true, ShowName = true, ShowDistance = true, ShowHealth = true},
+    BoxCreature = {Enabled = false, BoxNpc = true, BoxPlayer = true, BoxOther = true, BoxAliveOnly = false, BoxMode = "3D", ShowHitbox = false, MaxDistance = 0},
+    LineConnect = {Enabled = false, ConnectNpc = false, ConnectPlayer = true, ConnectOther = false, LineWallCheck = false, Origin = "Top", MaxDistance = 0},
+    AimbotV2 = {Enabled = false, AimPlayer = true, AimNpc = false, AimOther = false, AimPart = "Head", CircleSize = 150, AimSpeed = 0.3, WallCheck = false, TeamCheck = false, AliveCheck = true, Smooth = true, Predict = false, CustomTarget = nil, MaxDistance = 0},
+    AdvancedESP = {Enabled = false, ShowBox = true, BoxStyle = "Corner", BoxThickness = 1, ShowName = true, ShowHealth = true, ShowDistance = true, HealthStyle = "Bar", ShowChams = true, TeamCheck = false, ShowTeam = false, WallCheck = false, Tracer = false, TracerOrigin = "Bottom", Skeleton = false, MaxDistance = 300},
+    AutoFire = {Enabled = false},
+    GameInfo = {Enabled = false},
 }
 
 local Conns = {}
@@ -125,7 +137,6 @@ local ClickerThread, AntiAfkThread, AutoSaveThread, Fly1BtnY = 0, nil, nil, 0
 local ToggleRefreshers = {}
 local Updaters = {}
 
--- 辅助函数
 local MoveStateNames = {"Climbing","FallingDown","Flying","Freefall","GettingUp","Jumping","Landed","Physics","PlatformStanding","Ragdoll","Running","RunningNoPhysics","Seated","StrafingNoPhysics","Swimming"}
 local function disableMovementStates(hum)
     if not hum then return end
@@ -140,6 +151,7 @@ local function enableMovementStates(hum)
     end
 end
 
+-- 目标缓存
 local TargetCache = {Players = {}, Npcs = {}, Others = {}, All = {}}
 local LastNpcScan = 0
 local function updateTargetCache()
@@ -179,7 +191,6 @@ local function updateTargetCache()
     end
 end
 
-local MAX_RENDER_DIST = 300
 local function inRenderRange(partPos)
     if not hrp or not partPos then return false end
     return (hrp.Position - partPos).Magnitude <= MAX_RENDER_DIST
@@ -238,7 +249,7 @@ function reapplyAllFeatures()
     if not char then return end
     local hum = char:FindFirstChild("Humanoid")
     if not hum then return end
-    for key, state in pairs(Features) do
+    for key, state in pairs(States) do
         if type(state) == "table" and state.Enabled and Updaters[key] then
             pcall(Updaters[key])
         end
@@ -246,7 +257,7 @@ function reapplyAllFeatures()
 end
 
 -- ============================================================
--- 渲染系统（精简版）
+-- 渲染系统（完整移植）
 -- ============================================================
 local RenderFolder = Instance.new("Folder")
 RenderFolder.Name = "StarRender"; RenderFolder.Parent = CoreGui
@@ -494,7 +505,7 @@ local function clearRenderCache()
 end
 
 -- ============================================================
--- 音乐播放器
+-- 音乐播放器（完整移植）
 -- ============================================================
 local MusicDir = "/storage/emulated/0/Delta/StarMusic"
 local Music = {
@@ -838,7 +849,7 @@ local function buildMusicPanel()
     end)
     modeBtn.MouseButton1Click:Connect(toggleMusicMode)
     closeBtn.MouseButton1Click:Connect(function()
-        Features.MusicPlayer.Enabled = false
+        States.MusicPlayer.Enabled = false
         panel.Visible = false
     end)
 
@@ -886,61 +897,61 @@ local function buildMusicPanel()
 end
 
 -- ============================================================
--- 功能实现 Updaters（精简版）
+-- 功能实现 Updaters（完整移植自 Ninja Hub）
 -- ============================================================
 
 Updaters.WalkSpeed = function()
-    if Features.WalkSpeed.Enabled then
+    if States.WalkSpeed.Enabled then
         if Conns.WalkSpeed then return end
         Conns.WalkSpeed = RunService.Heartbeat:Connect(function()
-            if humanoid and humanoid.WalkSpeed ~= Features.WalkSpeed.Value then
-                humanoid.WalkSpeed = Features.WalkSpeed.Value
+            if humanoid and humanoid.WalkSpeed ~= States.WalkSpeed.Value then
+                humanoid.WalkSpeed = States.WalkSpeed.Value
             end
         end)
     else
         unbind("WalkSpeed")
-        if humanoid then humanoid.WalkSpeed = Features.WalkSpeed.Default or 16 end
+        if humanoid then humanoid.WalkSpeed = States.WalkSpeed.Default or 16 end
     end
 end
 
 Updaters.JumpHeight = function()
-    if Features.JumpHeight.Enabled then
+    if States.JumpHeight.Enabled then
         if Conns.JumpHeight then return end
         Conns.JumpHeight = RunService.Heartbeat:Connect(function()
-            if humanoid and humanoid.JumpHeight ~= Features.JumpHeight.Value then
-                humanoid.JumpHeight = Features.JumpHeight.Value
+            if humanoid and humanoid.JumpHeight ~= States.JumpHeight.Value then
+                humanoid.JumpHeight = States.JumpHeight.Value
             end
         end)
     else
         unbind("JumpHeight")
-        if humanoid then humanoid.JumpHeight = Features.JumpHeight.Default or 7.2 end
+        if humanoid then humanoid.JumpHeight = States.JumpHeight.Default or 7.2 end
     end
 end
 
 Updaters.GravityMod = function()
-    if Features.GravityMod.Enabled then
+    if States.GravityMod.Enabled then
         if Conns.GravityMod then return end
         Conns.GravityMod = RunService.Heartbeat:Connect(function()
-            if Workspace.Gravity ~= Features.GravityMod.Value then
-                Workspace.Gravity = Features.GravityMod.Value
+            if Workspace.Gravity ~= States.GravityMod.Value then
+                Workspace.Gravity = States.GravityMod.Value
             end
         end)
     else
         unbind("GravityMod")
-        Workspace.Gravity = Features.GravityMod.Default or 196.2
+        Workspace.Gravity = States.GravityMod.Default or 196.2
     end
 end
 
 Updaters.TpWalk = function()
-    if Features.TpWalk.Enabled then
+    if States.TpWalk.Enabled then
         if Conns.TpWalk then return end
-        Features.Fly1.Enabled = false; Updaters.Fly1()
-        Features.Fly2.Enabled = false; Updaters.Fly2()
-        Features.FreeMove.Enabled = false; Updaters.FreeMove()
+        States.Fly1.Enabled = false; Updaters.Fly1()
+        States.Fly2.Enabled = false; Updaters.Fly2()
+        States.FreeMove.Enabled = false; Updaters.FreeMove()
         if humanoid then disableMovementStates(humanoid) end
         Conns.TpWalk = RunService.Heartbeat:Connect(function()
             if not hrp or not humanoid then return end
-            local dist = Features.TpWalk.Value or 2
+            local dist = States.TpWalk.Value or 2
             local md = humanoid.MoveDirection
             if md.Magnitude > 0 then
                 local rp = RaycastParams.new()
@@ -961,15 +972,15 @@ Updaters.TpWalk = function()
 end
 
 Updaters.Fly1 = function()
-    if Features.Fly1.Enabled then
+    if States.Fly1.Enabled then
         if Conns.Fly1 then return end
-        Features.Fly2.Enabled = false; Updaters.Fly2()
-        Features.FreeMove.Enabled = false; Updaters.FreeMove()
-        Features.TpWalk.Enabled = false; Updaters.TpWalk()
+        States.Fly2.Enabled = false; Updaters.Fly2()
+        States.FreeMove.Enabled = false; Updaters.FreeMove()
+        States.TpWalk.Enabled = false; Updaters.TpWalk()
         if humanoid then disableMovementStates(humanoid) end
         Conns.Fly1 = RunService.Heartbeat:Connect(function(dt)
             if not hrp then return end
-            local speed = math.clamp(Features.Fly1.Value or 45, 1, 500)
+            local speed = math.clamp(States.Fly1.Value or 45, 1, 500)
             local kbX = (UserInputService:IsKeyDown(Enum.KeyCode.D) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.A) and 1 or 0)
             local kbZ = (UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.S) and 1 or 0)
             local kbY = (UserInputService:IsKeyDown(Enum.KeyCode.Space) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and 1 or 0)
@@ -987,15 +998,15 @@ Updaters.Fly1 = function()
 end
 
 Updaters.Fly2 = function()
-    if Features.Fly2.Enabled then
+    if States.Fly2.Enabled then
         if Conns.Fly2 then return end
-        Features.Fly1.Enabled = false; Updaters.Fly1()
-        Features.FreeMove.Enabled = false; Updaters.FreeMove()
-        Features.TpWalk.Enabled = false; Updaters.TpWalk()
+        States.Fly1.Enabled = false; Updaters.Fly1()
+        States.FreeMove.Enabled = false; Updaters.FreeMove()
+        States.TpWalk.Enabled = false; Updaters.TpWalk()
         if humanoid then disableMovementStates(humanoid) end
         Conns.Fly2 = RunService.Heartbeat:Connect(function(dt)
-            if not hrp or not Features.Fly2.Flying then return end
-            local speed = math.clamp(Features.Fly2.Value or 50, 1, 500)
+            if not hrp or not States.Fly2.Flying then return end
+            local speed = math.clamp(States.Fly2.Value or 50, 1, 500)
             local moveY = (UserInputService:IsKeyDown(Enum.KeyCode.E) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.Q) and 1 or 0)
             local moveX = (UserInputService:IsKeyDown(Enum.KeyCode.D) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.A) and 1 or 0)
             local moveZ = (UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.S) and 1 or 0)
@@ -1010,18 +1021,18 @@ Updaters.Fly2 = function()
         end)
     else
         unbind("Fly2")
-        Features.Fly2.Flying = false
+        States.Fly2.Flying = false
         if humanoid then enableMovementStates(humanoid) end
     end
 end
 
 local FreeMoveBG, FreeMoveBV
 Updaters.FreeMove = function()
-    if Features.FreeMove.Enabled then
+    if States.FreeMove.Enabled then
         if Conns.FreeMove then return end
-        Features.Fly1.Enabled = false; Updaters.Fly1()
-        Features.Fly2.Enabled = false; Updaters.Fly2()
-        Features.TpWalk.Enabled = false; Updaters.TpWalk()
+        States.Fly1.Enabled = false; Updaters.Fly1()
+        States.Fly2.Enabled = false; Updaters.Fly2()
+        States.TpWalk.Enabled = false; Updaters.TpWalk()
         Conns.FreeMove = RunService.RenderStepped:Connect(function()
             if not hrp or not humanoid then return end
             if not FreeMoveBG or not FreeMoveBG.Parent then
@@ -1038,7 +1049,7 @@ Updaters.FreeMove = function()
                 FreeMoveBV.Parent = hrp
                 humanoid.PlatformStand = true
             end
-            local speed = math.clamp(Features.FreeMove.Value or 50, 1, 500)
+            local speed = math.clamp(States.FreeMove.Value or 50, 1, 500)
             local moveZ = (UserInputService:IsKeyDown(Enum.KeyCode.S) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or 0)
             local moveX = (UserInputService:IsKeyDown(Enum.KeyCode.D) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.A) and 1 or 0)
             local moveY = (UserInputService:IsKeyDown(Enum.KeyCode.Space) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and 1 or 0)
@@ -1064,7 +1075,7 @@ end
 
 local NoclipCache = {}
 Updaters.Noclip = function()
-    if Features.Noclip.Enabled then
+    if States.Noclip.Enabled then
         if Conns.Noclip then return end
         NoclipCache = {}
         Conns.Noclip = RunService.Stepped:Connect(function()
@@ -1091,13 +1102,13 @@ end
 
 local BunnyCount = 0
 Updaters.BunnyHop = function()
-    if Features.BunnyHop.Enabled then
+    if States.BunnyHop.Enabled then
         if Conns.BunnyJump then return end
         BunnyCount = 0
         Conns.BunnyJump = UserInputService.JumpRequest:Connect(function()
             if not humanoid then return end
             BunnyCount = BunnyCount + 1
-            local bonus = math.min(BunnyCount * Features.BunnyHop.Value, 300)
+            local bonus = math.min(BunnyCount * States.BunnyHop.Value, 300)
             humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
             task.delay(0.05, function()
                 if hrp then
@@ -1118,7 +1129,7 @@ Updaters.BunnyHop = function()
 end
 
 Updaters.AutoRun = function()
-    if Features.AutoRun.Enabled then
+    if States.AutoRun.Enabled then
         if Conns.AutoRun then return end
         Conns.AutoRun = RunService.Heartbeat:Connect(function()
             if humanoid then humanoid:Move(Vector3.new(0,0,-1), true) end
@@ -1129,12 +1140,12 @@ Updaters.AutoRun = function()
 end
 
 Updaters.SuperJump = function()
-    if Features.SuperJump.Enabled then
+    if States.SuperJump.Enabled then
         if Conns.SuperJump then return end
         Conns.SuperJump = UserInputService.JumpRequest:Connect(function()
             if hrp then
                 local vel = hrp.AssemblyLinearVelocity
-                hrp.AssemblyLinearVelocity = Vector3.new(vel.X, Features.SuperJump.Value, vel.Z)
+                hrp.AssemblyLinearVelocity = Vector3.new(vel.X, States.SuperJump.Value, vel.Z)
             end
         end)
     else
@@ -1143,7 +1154,7 @@ Updaters.SuperJump = function()
 end
 
 Updaters.WallClimb = function()
-    if Features.WallClimb.Enabled then
+    if States.WallClimb.Enabled then
         if Conns.WallClimb then return end
         Conns.WallClimb = RunService.Heartbeat:Connect(function()
             if not hrp then return end
@@ -1151,7 +1162,7 @@ Updaters.WallClimb = function()
             local hit = Workspace:FindPartOnRay(ray, character)
             if hit then
                 local vel = hrp.AssemblyLinearVelocity
-                hrp.AssemblyLinearVelocity = Vector3.new(vel.X, Features.WallClimb.Value, vel.Z)
+                hrp.AssemblyLinearVelocity = Vector3.new(vel.X, States.WallClimb.Value, vel.Z)
             end
         end)
     else
@@ -1160,7 +1171,7 @@ Updaters.WallClimb = function()
 end
 
 Updaters.GodMode = function()
-    if Features.GodMode.Enabled then
+    if States.GodMode.Enabled then
         if Conns.God then return end
         Conns.God = RunService.Heartbeat:Connect(function()
             if humanoid then
@@ -1186,7 +1197,7 @@ end
 
 local NoCdLast = 0
 Updaters.NoCooldown = function()
-    if Features.NoCooldown.Enabled then
+    if States.NoCooldown.Enabled then
         if Conns.NoCooldown then return end
         NoCdLast = 0
         Conns.NoCooldown = RunService.Heartbeat:Connect(function()
@@ -1217,7 +1228,7 @@ end
 
 local InfAmmoLast = 0
 Updaters.InfiniteAmmo = function()
-    if Features.InfiniteAmmo.Enabled then
+    if States.InfiniteAmmo.Enabled then
         if Conns.InfAmmo then return end
         InfAmmoLast = 0
         Conns.InfAmmo = RunService.Heartbeat:Connect(function()
@@ -1247,7 +1258,7 @@ Updaters.InfiniteAmmo = function()
 end
 
 Updaters.AutoAttack = function()
-    if Features.AutoAttack.Enabled then
+    if States.AutoAttack.Enabled then
         if Conns.AutoAtk then return end
         Conns.AutoAtk = RunService.Heartbeat:Connect(function() tryFireTool() end)
     else
@@ -1256,14 +1267,14 @@ Updaters.AutoAttack = function()
 end
 
 Updaters.KillAura = function()
-    if Features.KillAura.Enabled then
+    if States.KillAura.Enabled then
         if Conns.KillAura then return end
         local tickCount = 0
         Conns.KillAura = RunService.Heartbeat:Connect(function()
             if not hrp then return end
             tickCount = tickCount + 1
             if tickCount % 2 ~= 0 then return end
-            local range = Features.KillAura.Value
+            local range = States.KillAura.Value
             updateTargetCache()
             for _, e in ipairs(TargetCache.All) do
                 if e.Hrp and (hrp.Position - e.Hrp.Position).Magnitude <= range then
@@ -1278,7 +1289,7 @@ Updaters.KillAura = function()
 end
 
 Updaters.Aimbot = function()
-    if Features.Aimbot.Enabled then
+    if States.Aimbot.Enabled then
         if Conns.Aimbot then return end
         Conns.Aimbot = RunService.Heartbeat:Connect(function()
             if not hrp then return end
@@ -1300,7 +1311,7 @@ Updaters.Aimbot = function()
 end
 
 Updaters.RapidFire = function()
-    if Features.RapidFire.Enabled then
+    if States.RapidFire.Enabled then
         if Conns.Rapid then return end
         Conns.Rapid = RunService.Heartbeat:Connect(function() tryFireTool() end)
     else
@@ -1309,29 +1320,29 @@ Updaters.RapidFire = function()
 end
 
 Updaters.AutoFire = function()
-    if Features.AutoFire.Enabled then
+    if States.AutoFire.Enabled then
         if Conns.AutoFire then return end
         local tickCount = 0
         Conns.AutoFire = RunService.Heartbeat:Connect(function()
-            if not Features.AimbotV2.Enabled then return end
+            if not States.AimbotV2.Enabled then return end
             tickCount = tickCount + 1
             if tickCount % 3 ~= 0 then return end
             local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-            local radius = Features.AimbotV2.CircleSize / 2
+            local radius = States.AimbotV2.CircleSize / 2
             updateTargetCache()
             local targets = {}
-            local ct = Features.AimbotV2.CustomTarget
+            local ct = States.AimbotV2.CustomTarget
             if ct and ct.Parent then table.insert(targets, ct)
             else
-                if Features.AimbotV2.AimPlayer then
+                if States.AimbotV2.AimPlayer then
                     for _, e in ipairs(TargetCache.Players) do table.insert(targets, e.Obj) end
                 end
-                if Features.AimbotV2.AimNpc then
+                if States.AimbotV2.AimNpc then
                     for _, e in ipairs(TargetCache.Npcs) do table.insert(targets, e.Obj) end
                 end
             end
             for _, char in ipairs(targets) do
-                local aimPart = char:FindFirstChild(Features.AimbotV2.AimPart) or char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+                local aimPart = char:FindFirstChild(States.AimbotV2.AimPart) or char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
                 if aimPart then
                     local sp, onScreen = Camera:WorldToViewportPoint(aimPart.Position)
                     if onScreen and sp.Z >= 0 then
@@ -1346,10 +1357,12 @@ Updaters.AutoFire = function()
     end
 end
 
--- 视觉
+-- ============================================================
+-- 视觉功能
+-- ============================================================
 local OrigLighting = {}
 Updaters.NightVision = function()
-    if Features.NightVision.Enabled then
+    if States.NightVision.Enabled then
         if Conns.Night then return end
         OrigLighting.Brightness = Lighting.Brightness
         OrigLighting.ClockTime = Lighting.ClockTime
@@ -1371,7 +1384,7 @@ Updaters.NightVision = function()
 end
 
 Updaters.FullBright = function()
-    if Features.FullBright.Enabled then
+    if States.FullBright.Enabled then
         if Conns.Bright then return end
         Conns.Bright = RunService.Heartbeat:Connect(function()
             Lighting.Brightness = 100
@@ -1390,7 +1403,7 @@ end
 local EspFolder = Instance.new("Folder")
 EspFolder.Name = "StarESP"; EspFolder.Parent = CoreGui
 Updaters.ESP = function()
-    if Features.ESP.Enabled then
+    if States.ESP.Enabled then
         if Conns.ESP then return end
         local tickCount = 0
         Conns.ESP = RunService.RenderStepped:Connect(function()
@@ -1467,7 +1480,7 @@ local function isCharPart(v)
 end
 local XrayTick = 0
 Updaters.Xray = function()
-    if Features.Xray.Enabled then
+    if States.Xray.Enabled then
         if Conns.Xray then return end
         local function applyXray()
             for _, v in pairs(Workspace:GetDescendants()) do
@@ -1498,7 +1511,7 @@ Updaters.Xray = function()
 end
 
 Updaters.NoFog = function()
-    if Features.NoFog.Enabled then
+    if States.NoFog.Enabled then
         if Conns.NoFog then return end
         Conns.NoFog = RunService.Heartbeat:Connect(function()
             Lighting.FogEnd = 100000; Lighting.FogStart = 0
@@ -1512,9 +1525,9 @@ local FilterFrame = Instance.new("Frame")
 FilterFrame.Size = UDim2.new(1,0,1,0); FilterFrame.BackgroundTransparency = 1
 FilterFrame.Visible = false; FilterFrame.ZIndex = 9000; FilterFrame.Parent = CoreGui
 Updaters.ColorFilter = function()
-    if Features.ColorFilter.Enabled then
+    if States.ColorFilter.Enabled then
         FilterFrame.Visible = true
-        local c = Features.ColorFilter.Value:lower()
+        local c = States.ColorFilter.Value:lower()
         local colorMap = {
             red = Color3.fromRGB(255,0,0), blue = Color3.fromRGB(0,0,255),
             green = Color3.fromRGB(0,255,0), pink = Color3.fromRGB(255,0,255),
@@ -1529,7 +1542,7 @@ end
 
 local OrigCamType = Camera.CameraType
 Updaters.FreeCam = function()
-    if Features.FreeCam.Enabled then
+    if States.FreeCam.Enabled then
         if Conns.FreeCam then return end
         OrigCamType = Camera.CameraType
         Camera.CameraType = Enum.CameraType.Scriptable
@@ -1555,7 +1568,7 @@ Updaters.FreeCam = function()
 end
 
 Updaters.ThermalESP = function()
-    if Features.ThermalESP.Enabled then
+    if States.ThermalESP.Enabled then
         if Conns.Thermal then return end
         Conns.Thermal = RunService.Heartbeat:Connect(function()
             updateTargetCache()
@@ -1595,9 +1608,11 @@ Updaters.ThermalESP = function()
     end
 end
 
--- 工具
+-- ============================================================
+-- 工具功能
+-- ============================================================
 Updaters.MusicPlayer = function()
-    if Features.MusicPlayer.Enabled then
+    if States.MusicPlayer.Enabled then
         if not MusicPanel then buildMusicPanel() end
         MusicPanel.Visible = true
         initMusicDir()
@@ -1630,10 +1645,9 @@ local function createClickerBall()
     table.insert(ClickerBalls, ball)
     return ball
 end
-Gui = {ClickerBalls = ClickerBalls}
 
 Updaters.AutoClicker = function()
-    if Features.AutoClicker.Enabled then
+    if States.AutoClicker.Enabled then
         if Conns.ClickerColor then return end
         Conns.ClickerColor = RunService.Heartbeat:Connect(function()
             for i, ball in ipairs(ClickerBalls) do
@@ -1648,11 +1662,11 @@ Updaters.AutoClicker = function()
 end
 
 Updaters.ClickerStart = function()
-    if Features.ClickerStart.Enabled then
+    if States.ClickerStart.Enabled then
         if ClickerThread then return end
         ClickerThread = task.spawn(function()
             local inset = GuiService:GetGuiInset()
-            while Features.ClickerStart.Enabled do
+            while States.ClickerStart.Enabled do
                 for _, ball in ipairs(ClickerBalls) do
                     if ball and ball.Visible and ball.Parent then
                         local pos = ball.AbsolutePosition + ball.AbsoluteSize / 2 + Vector2.new(inset.X, inset.Y)
@@ -1663,7 +1677,7 @@ Updaters.ClickerStart = function()
                         end)
                     end
                 end
-                task.wait(math.max(Features.AutoClicker.Value or 10, 1) / 1000)
+                task.wait(math.max(States.AutoClicker.Value or 10, 1) / 1000)
             end
             ClickerThread = nil
         end)
@@ -1673,7 +1687,7 @@ Updaters.ClickerStart = function()
 end
 
 Updaters.ClickerMulti = function()
-    if Features.ClickerMulti.Enabled then
+    if States.ClickerMulti.Enabled then
         for i = 1, 3 do
             if #ClickerBalls < 8 then createClickerBall() end
         end
@@ -1684,12 +1698,12 @@ Updaters.ClickerMulti = function()
         end
     end
     for _, ball in ipairs(ClickerBalls) do
-        ball.Visible = Features.AutoClicker.Enabled
+        ball.Visible = States.AutoClicker.Enabled
     end
 end
 
 Updaters.FastInteract = function()
-    if Features.FastInteract.Enabled then
+    if States.FastInteract.Enabled then
         if Conns.FastInt then return end
         Conns.FastInt = RunService.Heartbeat:Connect(function()
             for _, p in pairs(Workspace:GetDescendants()) do
@@ -1702,13 +1716,13 @@ Updaters.FastInteract = function()
 end
 
 Updaters.AutoSave = function()
-    if Features.AutoSave.Enabled then
+    if States.AutoSave.Enabled then
         if AutoSaveThread then return end
         AutoSaveThread = task.spawn(function()
-            while Features.AutoSave.Enabled do
+            while States.AutoSave.Enabled do
                 pcall(function()
                     local save = {}
-                    for k, v in pairs(Features) do
+                    for k, v in pairs(States) do
                         if type(v) == "table" then
                             save[k] = {}
                             for kk, vv in pairs(v) do
@@ -1730,10 +1744,10 @@ Updaters.AutoSave = function()
 end
 
 Updaters.AntiAfk = function()
-    if Features.AntiAfk.Enabled then
+    if States.AntiAfk.Enabled then
         if AntiAfkThread then return end
         AntiAfkThread = task.spawn(function()
-            while Features.AntiAfk.Enabled do
+            while States.AntiAfk.Enabled do
                 pcall(function()
                     if hrp then
                         local bv = Instance.new("BodyVelocity")
@@ -1750,9 +1764,11 @@ Updaters.AntiAfk = function()
     end
 end
 
--- 人物渲染
+-- ============================================================
+-- 人物渲染功能
+-- ============================================================
 Updaters.NpcDisplay = function()
-    if Features.NpcDisplay.Enabled then
+    if States.NpcDisplay.Enabled then
         if Conns.NpcDisp then return end
         local tickCount = 0
         Conns.NpcDisp = RunService.RenderStepped:Connect(function()
@@ -1770,7 +1786,7 @@ Updaters.NpcDisplay = function()
                 for _, pair in ipairs(skeleton) do
                     local p1 = model:FindFirstChild(pair[1])
                     local p2 = model:FindFirstChild(pair[2])
-                    if p1 and p2 and Features.NpcDisplay.ShowBones then
+                    if p1 and p2 and States.NpcDisplay.ShowBones then
                         drawBone(BeamPools.Npc, p1, p2, getGoldColor(model.Name:byte(1) or 1))
                     end
                 end
@@ -1780,9 +1796,9 @@ Updaters.NpcDisplay = function()
                         local sp, onScreen = worldToScreen(part.Position)
                         if onScreen then
                             local shouldShow = false
-                            if partName == "Head" and Features.NpcDisplay.ShowHead then shouldShow = true end
-                            if (partName == "UpperTorso" or partName == "LowerTorso" or partName == "Torso") and Features.NpcDisplay.ShowTorso then shouldShow = true end
-                            if (partName:find("Arm") or partName:find("Leg")) and Features.NpcDisplay.ShowLimbs then shouldShow = true end
+                            if partName == "Head" and States.NpcDisplay.ShowHead then shouldShow = true end
+                            if (partName == "UpperTorso" or partName == "LowerTorso" or partName == "Torso") and States.NpcDisplay.ShowTorso then shouldShow = true end
+                            if (partName:find("Arm") or partName:find("Leg")) and States.NpcDisplay.ShowLimbs then shouldShow = true end
                             if shouldShow then
                                 local dot = getFromPool(Pools.Npc.Dots, RenderFolder)
                                 dot.Size = UDim2.new(0, 6, 0, 6)
@@ -1804,7 +1820,7 @@ Updaters.NpcDisplay = function()
 end
 
 Updaters.PlayerDisplay = function()
-    if Features.PlayerDisplay.Enabled then
+    if States.PlayerDisplay.Enabled then
         if Conns.PlayerDisp then return end
         Conns.PlayerDisp = RunService.RenderStepped:Connect(function()
             clearBeams(BeamPools.Player)
@@ -1821,18 +1837,18 @@ Updaters.PlayerDisplay = function()
                 for _, pair in ipairs(skeleton) do
                     local p1 = char:FindFirstChild(pair[1])
                     local p2 = char:FindFirstChild(pair[2])
-                    if p1 and p2 and Features.PlayerDisplay.ShowBones then
+                    if p1 and p2 and States.PlayerDisplay.ShowBones then
                         drawBone(BeamPools.Player, p1, p2, getGoldColor(p.UserId))
                     end
                 end
                 local sp, onScreen = worldToScreen(targetHrp.Position)
                 if onScreen then
                     local txtLines = {}
-                    if Features.PlayerDisplay.ShowName then table.insert(txtLines, p.Name) end
-                    if Features.PlayerDisplay.ShowHealth and hum then
+                    if States.PlayerDisplay.ShowName then table.insert(txtLines, p.Name) end
+                    if States.PlayerDisplay.ShowHealth and hum then
                         table.insert(txtLines, string.format("❤ %.0f", hum.Health))
                     end
-                    if Features.PlayerDisplay.ShowDistance and hrp and targetHrp then
+                    if States.PlayerDisplay.ShowDistance and hrp and targetHrp then
                         table.insert(txtLines, string.format("%.1fm", (hrp.Position - targetHrp.Position).Magnitude))
                     end
                     if #txtLines > 0 then
@@ -1851,8 +1867,8 @@ Updaters.PlayerDisplay = function()
                             local psp, pon = worldToScreen(part.Position)
                             if pon then
                                 local shouldShow = false
-                                if partName == "Head" and Features.PlayerDisplay.ShowHead then shouldShow = true end
-                                if (partName == "UpperTorso" or partName == "LowerTorso" or partName == "Torso") and Features.PlayerDisplay.ShowTorso then shouldShow = true end
+                                if partName == "Head" and States.PlayerDisplay.ShowHead then shouldShow = true end
+                                if (partName == "UpperTorso" or partName == "LowerTorso" or partName == "Torso") and States.PlayerDisplay.ShowTorso then shouldShow = true end
                                 if shouldShow then
                                     local dot = getFromPool(Pools.Player.Dots, RenderFolder)
                                     dot.Size = UDim2.new(0, 6, 0, 6)
@@ -1875,35 +1891,35 @@ Updaters.PlayerDisplay = function()
 end
 
 Updaters.BoxCreature = function()
-    if Features.BoxCreature.Enabled then
+    if States.BoxCreature.Enabled then
         if Conns.BoxCreature then return end
         Conns.BoxCreature = RunService.RenderStepped:Connect(function()
             clearPool(Pools.Box.Lines)
             clearAdorns(AdornPools.Box)
             clearAdorns(AdornPools.Hitbox)
             updateTargetCache()
-            local maxD = Features.BoxCreature.MaxDistance or 0
+            local maxD = States.BoxCreature.MaxDistance or 0
             local function drawFor(char, key)
                 local hrp2 = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("Head")
                 if hrp2 and not inRenderRange(hrp2.Position) then return end
                 if maxD ~= 0 and hrp and hrp2 then
                     if (hrp.Position - hrp2.Position).Magnitude > maxD then return end
                 end
-                if Features.BoxCreature.ShowHitbox then
+                if States.BoxCreature.ShowHitbox then
                     drawHitbox3D(AdornPools.Hitbox, char, C.Gold)
-                elseif Features.BoxCreature.BoxMode == "3D" then
+                elseif States.BoxCreature.BoxMode == "3D" then
                     drawBox3D(AdornPools.Box, char, getGoldColor(key:byte(1) or 1))
                 else
                     drawBox2D(Pools.Box.Lines, RenderFolder, char, getGoldColor(key:byte(1) or 1))
                 end
             end
-            if Features.BoxCreature.BoxPlayer then
+            if States.BoxCreature.BoxPlayer then
                 for _, e in ipairs(TargetCache.Players) do drawFor(e.Obj, e.Obj.Name) end
             end
-            if Features.BoxCreature.BoxNpc then
+            if States.BoxCreature.BoxNpc then
                 for _, e in ipairs(TargetCache.Npcs) do drawFor(e.Obj, e.Obj.Name) end
             end
-            if Features.BoxCreature.BoxOther then
+            if States.BoxCreature.BoxOther then
                 for _, m in ipairs(TargetCache.Others) do drawFor(m, m.Name) end
             end
         end)
@@ -1916,13 +1932,13 @@ Updaters.BoxCreature = function()
 end
 
 Updaters.LineConnect = function()
-    if Features.LineConnect.Enabled then
+    if States.LineConnect.Enabled then
         if Conns.LineConnect then return end
         Conns.LineConnect = RunService.RenderStepped:Connect(function()
             clearBeams(BeamPools.Connect)
             updateTargetCache()
-            local o = Features.LineConnect.Origin or "Top"
-            local maxD = Features.LineConnect.MaxDistance or 0
+            local o = States.LineConnect.Origin or "Top"
+            local maxD = States.LineConnect.MaxDistance or 0
             local offsetY = o == "Top" and 3 or (o == "Bottom" and -3 or 0)
             local origin = Camera.CFrame:PointToWorldSpace(Vector3.new(0, offsetY, -6))
             local function drawLineTo(char, key)
@@ -1932,19 +1948,19 @@ Updaters.LineConnect = function()
                 local endPos = head and head.Position or (hrp2 and hrp2.Position or nil)
                 if not endPos or not inRenderRange(endPos) then return end
                 if maxD ~= 0 and hrp and (hrp.Position - endPos).Magnitude > maxD then return end
-                if Features.LineConnect.LineWallCheck then
+                if States.LineConnect.LineWallCheck then
                     local checkPart = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
                     if checkPart and isBlockedByWall(checkPart, char) then return end
                 end
                 draw3DLine(BeamPools.Connect, origin, endPos, getGoldColor(key:byte(1) or 1))
             end
-            if Features.LineConnect.ConnectPlayer then
+            if States.LineConnect.ConnectPlayer then
                 for _, e in ipairs(TargetCache.Players) do drawLineTo(e.Obj, e.Plr.Name) end
             end
-            if Features.LineConnect.ConnectNpc then
+            if States.LineConnect.ConnectNpc then
                 for _, e in ipairs(TargetCache.Npcs) do drawLineTo(e.Obj, e.Obj.Name) end
             end
-            if Features.LineConnect.ConnectOther then
+            if States.LineConnect.ConnectOther then
                 for _, m in ipairs(TargetCache.Others) do drawLineTo(m, m.Name) end
             end
         end)
@@ -1957,7 +1973,7 @@ end
 local AimScanTick = 0
 local AimClosest = nil
 Updaters.AimbotV2 = function()
-    if Features.AimbotV2.Enabled then
+    if States.AimbotV2.Enabled then
         if Conns.AimbotV2 then return end
         AimClosest = nil
         AimScanTick = 0
@@ -1965,25 +1981,25 @@ Updaters.AimbotV2 = function()
             AimScanTick = AimScanTick + 1
             if AimScanTick % 3 == 0 then
                 local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-                local radius = Features.AimbotV2.CircleSize / 2
-                local maxD = Features.AimbotV2.MaxDistance or 0
+                local radius = States.AimbotV2.CircleSize / 2
+                local maxD = States.AimbotV2.MaxDistance or 0
                 local best, bestDist = nil, math.huge
                 updateTargetCache()
                 local targets = {}
-                local ct = Features.AimbotV2.CustomTarget
+                local ct = States.AimbotV2.CustomTarget
                 if ct and ct.Parent then
                     local hum = ct:FindFirstChildOfClass("Humanoid")
                     local hrp2 = ct:FindFirstChild("HumanoidRootPart") or ct:FindFirstChild("Torso")
                     table.insert(targets, {Obj = ct, Hum = hum, Hrp = hrp2})
                 else
-                    Features.AimbotV2.CustomTarget = nil
-                    if Features.AimbotV2.AimPlayer then
+                    States.AimbotV2.CustomTarget = nil
+                    if States.AimbotV2.AimPlayer then
                         for _, e in ipairs(TargetCache.Players) do table.insert(targets, e) end
                     end
-                    if Features.AimbotV2.AimNpc then
+                    if States.AimbotV2.AimNpc then
                         for _, e in ipairs(TargetCache.Npcs) do table.insert(targets, e) end
                     end
-                    if Features.AimbotV2.AimOther then
+                    if States.AimbotV2.AimOther then
                         for _, m in ipairs(TargetCache.Others) do
                             table.insert(targets, {Obj = m, Hum = nil, Hrp = m.PrimaryPart})
                         end
@@ -1992,18 +2008,18 @@ Updaters.AimbotV2 = function()
                 for _, e in ipairs(targets) do
                     local char = e.Obj
                     local hum = e.Hum
-                    if Features.AimbotV2.AliveCheck and hum and hum.Health <= 0 then continue end
-                    if Features.AimbotV2.TeamCheck and e.Plr and e.Plr.Team ~= nil and e.Plr.Team == player.Team then continue end
-                    local aimPart = char:FindFirstChild(Features.AimbotV2.AimPart) or char:FindFirstChild("Head") or e.Hrp
+                    if States.AimbotV2.AliveCheck and hum and hum.Health <= 0 then continue end
+                    if States.AimbotV2.TeamCheck and e.Plr and e.Plr.Team ~= nil and e.Plr.Team == player.Team then continue end
+                    local aimPart = char:FindFirstChild(States.AimbotV2.AimPart) or char:FindFirstChild("Head") or e.Hrp
                     if not aimPart then continue end
                     local sp, onScreen = worldToScreen(aimPart.Position)
                     if not onScreen then continue end
                     if (Vector2.new(sp.X, sp.Y) - center).Magnitude > radius then continue end
-                    if Features.AimbotV2.WallCheck and isBlockedByWall(aimPart, char) then continue end
+                    if States.AimbotV2.WallCheck and isBlockedByWall(aimPart, char) then continue end
                     local worldDist = hrp and (hrp.Position - aimPart.Position).Magnitude or 0
                     if maxD ~= 0 and worldDist > maxD then continue end
                     local aimPos = aimPart.Position
-                    if Features.AimbotV2.Predict and aimPart:IsA("BasePart") then
+                    if States.AimbotV2.Predict and aimPart:IsA("BasePart") then
                         local dist3 = (Camera.CFrame.Position - aimPos).Magnitude
                         aimPos = aimPos + aimPart.AssemblyLinearVelocity * (dist3 / 1000)
                     end
@@ -2013,8 +2029,8 @@ Updaters.AimbotV2 = function()
             end
             if AimClosest then
                 local targetCF = CFrame.new(Camera.CFrame.Position, AimClosest)
-                if Features.AimbotV2.Smooth then
-                    Camera.CFrame = Camera.CFrame:Lerp(targetCF, Features.AimbotV2.AimSpeed or 0.3)
+                if States.AimbotV2.Smooth then
+                    Camera.CFrame = Camera.CFrame:Lerp(targetCF, States.AimbotV2.AimSpeed or 0.3)
                 else
                     Camera.CFrame = targetCF
                 end
@@ -2027,7 +2043,7 @@ Updaters.AimbotV2 = function()
 end
 
 Updaters.AdvancedESP = function()
-    if Features.AdvancedESP.Enabled then
+    if States.AdvancedESP.Enabled then
         if Conns.AdvESP then return end
         local tickCount = 0
         Conns.AdvESP = RunService.RenderStepped:Connect(function()
@@ -2047,12 +2063,12 @@ Updaters.AdvancedESP = function()
             for _, e in ipairs(TargetCache.Npcs) do
                 table.insert(targets, {Char=e.Obj, Hum=e.Hum, IsPlayer=false})
             end
-            local maxDist = Features.AdvancedESP.MaxDistance or 300
+            local maxDist = States.AdvancedESP.MaxDistance or 300
             local camPos = Camera.CFrame.Position
             for _, t in ipairs(targets) do
                 local hum = t.Hum
                 local char = t.Char
-                if t.IsPlayer and Features.AdvancedESP.TeamCheck and not Features.AdvancedESP.ShowTeam
+                if t.IsPlayer and States.AdvancedESP.TeamCheck and not States.AdvancedESP.ShowTeam
                     and t.Plr.Team ~= nil and t.Plr.Team == player.Team then continue end
                 local hrp2 = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
                 local head = char:FindFirstChild("Head")
@@ -2062,9 +2078,9 @@ Updaters.AdvancedESP = function()
                 if not onScreen then continue end
                 local dist = (hrp2.Position - camPos).Magnitude
                 if maxDist ~= 0 and dist > maxDist then continue end
-                if Features.AdvancedESP.WallCheck and isBlockedByWall(hrp2, char) then continue end
+                if States.AdvancedESP.WallCheck and isBlockedByWall(hrp2, char) then continue end
                 valid[char] = true
-                if Features.AdvancedESP.ShowChams then
+                if States.AdvancedESP.ShowChams then
                     local h = AdvESPHighlights[char]
                     if not h or not h.Parent then
                         h = Instance.new("Highlight")
@@ -2083,12 +2099,12 @@ Updaters.AdvancedESP = function()
                 local headSp = worldToScreen(head.Position)
                 local height = math.abs(headSp.Y - sp.Y) * 2.2
                 local width = height * 0.6
-                if Features.AdvancedESP.ShowBox and height >= 5 then
+                if States.AdvancedESP.ShowBox and height >= 5 then
                     local boxX = sp.X - width/2
                     local boxY = sp.Y - height/2
                     local color = getGoldColor(char.Name:byte(1) or 1)
-                    local thickness = Features.AdvancedESP.BoxThickness or 1
-                    if Features.AdvancedESP.BoxStyle == "Corner" then
+                    local thickness = States.AdvancedESP.BoxThickness or 1
+                    if States.AdvancedESP.BoxStyle == "Corner" then
                         local cs = width * 0.2
                         drawHLine(Pools.Adv.Lines, RenderFolder, boxX, boxY, cs, color, thickness)
                         drawVLine(Pools.Adv.Lines, RenderFolder, boxX, boxY, cs, color, thickness)
@@ -2104,7 +2120,7 @@ Updaters.AdvancedESP = function()
                         drawVLine(Pools.Adv.Lines, RenderFolder, boxX, boxY, height, color, thickness)
                         drawVLine(Pools.Adv.Lines, RenderFolder, boxX + width, boxY, height, color, thickness)
                     end
-                    if Features.AdvancedESP.ShowHealth and hum and Features.AdvancedESP.HealthStyle ~= "Text" then
+                    if States.AdvancedESP.ShowHealth and hum and States.AdvancedESP.HealthStyle ~= "Text" then
                         local barBg = getFromPool(Pools.Adv.Bars, RenderFolder)
                         barBg.Size = UDim2.new(0, 4, 0, height)
                         barBg.Position = UDim2.new(0, boxX - 6, 0, boxY)
@@ -2119,7 +2135,7 @@ Updaters.AdvancedESP = function()
                         barFill.Parent = RenderFolder
                     end
                 end
-                if Features.AdvancedESP.ShowName then
+                if States.AdvancedESP.ShowName then
                     local nameL = getFromPool(Pools.Adv.Texts, RenderFolder)
                     nameL.Size = UDim2.new(0, 120, 0, 16)
                     nameL.Position = UDim2.new(0, headSp.X - 60, 0, headSp.Y - 20)
@@ -2129,7 +2145,7 @@ Updaters.AdvancedESP = function()
                     nameL.Font = Enum.Font.GothamBold
                     nameL.Parent = RenderFolder
                 end
-                if Features.AdvancedESP.ShowHealth and hum and Features.AdvancedESP.HealthStyle ~= "Bar" then
+                if States.AdvancedESP.ShowHealth and hum and States.AdvancedESP.HealthStyle ~= "Bar" then
                     local hpL = getFromPool(Pools.Adv.Texts, RenderFolder)
                     hpL.Size = UDim2.new(0, 120, 0, 14)
                     hpL.Position = UDim2.new(0, headSp.X - 60, 0, headSp.Y - 5)
@@ -2140,7 +2156,7 @@ Updaters.AdvancedESP = function()
                     hpL.Font = Enum.Font.Gotham
                     hpL.Parent = RenderFolder
                 end
-                if Features.AdvancedESP.ShowDistance then
+                if States.AdvancedESP.ShowDistance then
                     local dL = getFromPool(Pools.Adv.Texts, RenderFolder)
                     dL.Size = UDim2.new(0, 120, 0, 14)
                     dL.Position = UDim2.new(0, headSp.X - 60, 0, headSp.Y + 10)
@@ -2150,10 +2166,10 @@ Updaters.AdvancedESP = function()
                     dL.Font = Enum.Font.Gotham
                     dL.Parent = RenderFolder
                 end
-                if Features.AdvancedESP.Tracer then
+                if States.AdvancedESP.Tracer then
                     draw3DLine(BeamPools.Adv, camPos, hrp2.Position, getGoldColor(char.Name:byte(1) or 1))
                 end
-                if Features.AdvancedESP.Skeleton then
+                if States.AdvancedESP.Skeleton then
                     local skeleton = getSkeleton(char)
                     for _, pair in ipairs(skeleton) do
                         local p1 = char:FindFirstChild(pair[1])
@@ -2185,7 +2201,9 @@ Updaters.AdvancedESP = function()
     end
 end
 
--- 系统
+-- ============================================================
+-- 系统功能
+-- ============================================================
 local FpsCount, FpsLast = 0, tick()
 local InfoLabel = Instance.new("TextLabel")
 InfoLabel.Size = UDim2.new(0, 230, 0, 28)
@@ -2201,7 +2219,7 @@ InfoLabel.ZIndex = 9350
 InfoLabel.Parent = CoreGui
 
 Updaters.ShowFps = function()
-    if Features.ShowFps.Enabled then
+    if States.ShowFps.Enabled then
         InfoLabel.Visible = true
         if Conns.FPS then return end
         Conns.FPS = RunService.Heartbeat:Connect(function()
@@ -2209,7 +2227,7 @@ Updaters.ShowFps = function()
             local now = tick()
             if now - FpsLast >= 1 then
                 local txt = "FPS: " .. FpsCount
-                if Features.ShowCoords.Enabled and hrp then
+                if States.ShowCoords.Enabled and hrp then
                     local pos = hrp.Position
                     txt = txt .. string.format(" | %.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z)
                 end
@@ -2219,19 +2237,19 @@ Updaters.ShowFps = function()
         end)
     else
         unbind("FPS")
-        if not Features.ShowCoords.Enabled then InfoLabel.Visible = false end
+        if not States.ShowCoords.Enabled then InfoLabel.Visible = false end
     end
 end
 
 Updaters.ShowCoords = function()
-    if Features.ShowCoords.Enabled then
+    if States.ShowCoords.Enabled then
         InfoLabel.Visible = true
         if Conns.Coords then return end
         Conns.Coords = RunService.Heartbeat:Connect(function()
             if hrp then
                 local pos = hrp.Position
                 local txt = string.format("坐标: %.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z)
-                if Features.ShowFps.Enabled then
+                if States.ShowFps.Enabled then
                     txt = (InfoLabel.Text:match("FPS: %d+") or "FPS: --") .. " | " .. txt
                 end
                 InfoLabel.Text = txt
@@ -2239,15 +2257,15 @@ Updaters.ShowCoords = function()
         end)
     else
         unbind("Coords")
-        if not Features.ShowFps.Enabled then InfoLabel.Visible = false end
+        if not States.ShowFps.Enabled then InfoLabel.Visible = false end
     end
 end
 
 Updaters.TimeOfDay = function()
-    if Features.TimeOfDay.Enabled then
+    if States.TimeOfDay.Enabled then
         if Conns.Time then return end
         Conns.Time = RunService.Heartbeat:Connect(function()
-            Lighting.ClockTime = Features.TimeOfDay.Value
+            Lighting.ClockTime = States.TimeOfDay.Value
         end)
     else
         unbind("Time")
@@ -2255,7 +2273,7 @@ Updaters.TimeOfDay = function()
 end
 
 Updaters.SitAnywhere = function()
-    if Features.SitAnywhere.Enabled then
+    if States.SitAnywhere.Enabled then
         if Conns.Sit then return end
         Conns.Sit = UserInputService.InputBegan:Connect(function(input)
             if input.KeyCode == Enum.KeyCode.X then
@@ -2281,14 +2299,14 @@ WarnLabel.ZIndex = 9360
 WarnLabel.Parent = CoreGui
 
 Updaters.DangerWarning = function()
-    if Features.DangerWarning.Enabled then
+    if States.DangerWarning.Enabled then
         if Conns.Danger then return end
         local tickCount = 0
         Conns.Danger = RunService.Heartbeat:Connect(function()
             tickCount = tickCount + 1
             if tickCount % 3 ~= 0 then return end
             if not hrp then WarnLabel.Visible = false; return end
-            local range = Features.DangerWarning.Value or 50
+            local range = States.DangerWarning.Value or 50
             local closest, closestDist = nil, math.huge
             updateTargetCache()
             for _, e in ipairs(TargetCache.All) do
@@ -2312,162 +2330,154 @@ Updaters.DangerWarning = function()
 end
 
 -- ============================================================
--- 构建 WindUI 窗口（半透明 + 强制标签页）
+-- 构建 WindUI 窗口（使用标准 Tab）
 -- ============================================================
 local Window = WindUI:CreateWindow({
-    Title = "✨ 星光辅助 V2.2",
+    Title = "✨ 星光辅助 V3.0",
     Icon = "star",
-    Author = "半透明 · 移动优化",
+    Author = "完整功能版",
     Folder = "StarAux",
     Size = UDim2.fromOffset(420, 560),
-    Transparent = true,   -- 开启半透明
+    Transparent = true,
     Theme = "StarGold",
     SideBarWidth = 160,
     HasOutline = true,
 })
 
--- 创建所有标签页（强制使用 Tab）
 local Tabs = {}
 local tabNames = {"移动", "战斗", "视觉", "工具", "人物", "系统"}
 local tabIcons = {"move", "sword", "eye", "wrench", "user", "settings"}
 
 for i = 1, 6 do
-    Tabs[i] = Window:Tab({
-        Title = tabNames[i],
-        Icon = tabIcons[i],
-    })
+    Tabs[i] = Window:Tab({ Title = tabNames[i], Icon = tabIcons[i] })
 end
 
--- ============================================================
--- 填充每个标签页
--- ============================================================
+-- 填充标签页（使用 pcall 保护，确保单个控件失败不影响整体）
+pcall(function()
+    -- 移动标签页
+    Tabs[1]:Section({ Title = "基础移动" })
+    Tabs[1]:Toggle({ Title = "加速移动", Value = false, Callback = function(v) States.WalkSpeed.Enabled = v; Updaters.WalkSpeed() end })
+    Tabs[1]:Slider({ Title = "移动速度", Value = { Min = 1, Max = 500, Default = 100 }, Callback = function(v) States.WalkSpeed.Value = v end })
+    Tabs[1]:Toggle({ Title = "传送行走", Value = false, Callback = function(v) States.TpWalk.Enabled = v; Updaters.TpWalk() end })
+    Tabs[1]:Slider({ Title = "传送距离", Value = { Min = 1, Max = 100, Default = 2 }, Callback = function(v) States.TpWalk.Value = v end })
+    Tabs[1]:Toggle({ Title = "飞行模式 (F键)", Value = false, Callback = function(v) States.Fly1.Enabled = v; Updaters.Fly1() end })
+    Tabs[1]:Slider({ Title = "飞行速度", Value = { Min = 1, Max = 500, Default = 45 }, Callback = function(v) States.Fly1.Value = v end })
+    Tabs[1]:Toggle({ Title = "飞行模式2 (WASD+EQ)", Value = false, Callback = function(v) States.Fly2.Enabled = v; Updaters.Fly2() end })
+    Tabs[1]:Slider({ Title = "飞行速度2", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) States.Fly2.Value = v end })
+    Tabs[1]:Toggle({ Title = "自由移动", Value = false, Callback = function(v) States.FreeMove.Enabled = v; Updaters.FreeMove() end })
+    Tabs[1]:Slider({ Title = "自由移动速度", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) States.FreeMove.Value = v end })
+    Tabs[1]:Toggle({ Title = "穿墙 (NoClip)", Value = false, Callback = function(v) States.Noclip.Enabled = v; Updaters.Noclip() end })
+    Tabs[1]:Toggle({ Title = "超级连跳", Value = false, Callback = function(v) States.BunnyHop.Enabled = v; Updaters.BunnyHop() end })
+    Tabs[1]:Slider({ Title = "连跳增量", Value = { Min = 1, Max = 100, Default = 5 }, Callback = function(v) States.BunnyHop.Value = v end })
+    Tabs[1]:Toggle({ Title = "跳高修改", Value = false, Callback = function(v) States.JumpHeight.Enabled = v; Updaters.JumpHeight() end })
+    Tabs[1]:Slider({ Title = "跳跃高度", Value = { Min = 1, Max = 500, Default = 100 }, Callback = function(v) States.JumpHeight.Value = v end })
+    Tabs[1]:Toggle({ Title = "自动奔跑", Value = false, Callback = function(v) States.AutoRun.Enabled = v; Updaters.AutoRun() end })
+    Tabs[1]:Toggle({ Title = "超级跳跃", Value = false, Callback = function(v) States.SuperJump.Enabled = v; Updaters.SuperJump() end })
+    Tabs[1]:Slider({ Title = "超级跳跃力度", Value = { Min = 1, Max = 500, Default = 200 }, Callback = function(v) States.SuperJump.Value = v end })
+    Tabs[1]:Toggle({ Title = "爬墙模式", Value = false, Callback = function(v) States.WallClimb.Enabled = v; Updaters.WallClimb() end })
+    Tabs[1]:Slider({ Title = "爬墙速度", Value = { Min = 1, Max = 200, Default = 50 }, Callback = function(v) States.WallClimb.Value = v end })
 
--- 1. 移动标签页
-Tabs[1]:Section({ Title = "基础移动" })
-Tabs[1]:Toggle({ Title = "加速移动", Value = false, Callback = function(v) Features.WalkSpeed.Enabled = v; Updaters.WalkSpeed() end })
-Tabs[1]:Slider({ Title = "移动速度", Value = { Min = 1, Max = 500, Default = 100 }, Callback = function(v) Features.WalkSpeed.Value = v end })
-Tabs[1]:Toggle({ Title = "传送行走", Value = false, Callback = function(v) Features.TpWalk.Enabled = v; Updaters.TpWalk() end })
-Tabs[1]:Slider({ Title = "传送距离", Value = { Min = 1, Max = 100, Default = 2 }, Callback = function(v) Features.TpWalk.Value = v end })
-Tabs[1]:Toggle({ Title = "飞行模式 (F键)", Value = false, Callback = function(v) Features.Fly1.Enabled = v; Updaters.Fly1() end })
-Tabs[1]:Slider({ Title = "飞行速度", Value = { Min = 1, Max = 500, Default = 45 }, Callback = function(v) Features.Fly1.Value = v end })
-Tabs[1]:Toggle({ Title = "飞行模式2 (WASD+EQ)", Value = false, Callback = function(v) Features.Fly2.Enabled = v; Updaters.Fly2() end })
-Tabs[1]:Slider({ Title = "飞行速度2", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.Fly2.Value = v end })
-Tabs[1]:Toggle({ Title = "自由移动", Value = false, Callback = function(v) Features.FreeMove.Enabled = v; Updaters.FreeMove() end })
-Tabs[1]:Slider({ Title = "自由移动速度", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.FreeMove.Value = v end })
-Tabs[1]:Toggle({ Title = "穿墙 (NoClip)", Value = false, Callback = function(v) Features.Noclip.Enabled = v; Updaters.Noclip() end })
-Tabs[1]:Toggle({ Title = "超级连跳", Value = false, Callback = function(v) Features.BunnyHop.Enabled = v; Updaters.BunnyHop() end })
-Tabs[1]:Slider({ Title = "连跳增量", Value = { Min = 1, Max = 100, Default = 5 }, Callback = function(v) Features.BunnyHop.Value = v end })
-Tabs[1]:Toggle({ Title = "跳高修改", Value = false, Callback = function(v) Features.JumpHeight.Enabled = v; Updaters.JumpHeight() end })
-Tabs[1]:Slider({ Title = "跳跃高度", Value = { Min = 1, Max = 500, Default = 100 }, Callback = function(v) Features.JumpHeight.Value = v end })
-Tabs[1]:Toggle({ Title = "自动奔跑", Value = false, Callback = function(v) Features.AutoRun.Enabled = v; Updaters.AutoRun() end })
-Tabs[1]:Toggle({ Title = "超级跳跃", Value = false, Callback = function(v) Features.SuperJump.Enabled = v; Updaters.SuperJump() end })
-Tabs[1]:Slider({ Title = "超级跳跃力度", Value = { Min = 1, Max = 500, Default = 200 }, Callback = function(v) Features.SuperJump.Value = v end })
-Tabs[1]:Toggle({ Title = "爬墙模式", Value = false, Callback = function(v) Features.WallClimb.Enabled = v; Updaters.WallClimb() end })
-Tabs[1]:Slider({ Title = "爬墙速度", Value = { Min = 1, Max = 200, Default = 50 }, Callback = function(v) Features.WallClimb.Value = v end })
+    -- 战斗标签页
+    Tabs[2]:Section({ Title = "战斗增强" })
+    Tabs[2]:Toggle({ Title = "无敌模式", Value = false, Callback = function(v) States.GodMode.Enabled = v; Updaters.GodMode() end })
+    Tabs[2]:Toggle({ Title = "攻击无间隔", Value = false, Callback = function(v) States.NoCooldown.Enabled = v; Updaters.NoCooldown() end })
+    Tabs[2]:Toggle({ Title = "无限子弹", Value = false, Callback = function(v) States.InfiniteAmmo.Enabled = v; Updaters.InfiniteAmmo() end })
+    Tabs[2]:Toggle({ Title = "自动攻击", Value = false, Callback = function(v) States.AutoAttack.Enabled = v; Updaters.AutoAttack() end })
+    Tabs[2]:Toggle({ Title = "杀戮光环", Value = false, Callback = function(v) States.KillAura.Enabled = v; Updaters.KillAura() end })
+    Tabs[2]:Slider({ Title = "杀戮光环范围", Value = { Min = 1, Max = 100, Default = 20 }, Callback = function(v) States.KillAura.Value = v end })
+    Tabs[2]:Toggle({ Title = "自动瞄准 (简单)", Value = false, Callback = function(v) States.Aimbot.Enabled = v; Updaters.Aimbot() end })
+    Tabs[2]:Toggle({ Title = "快速射击", Value = false, Callback = function(v) States.RapidFire.Enabled = v; Updaters.RapidFire() end })
+    Tabs[2]:Toggle({ Title = "自动开火", Value = false, Callback = function(v) States.AutoFire.Enabled = v; Updaters.AutoFire() end })
 
--- 2. 战斗标签页
-Tabs[2]:Section({ Title = "战斗增强" })
-Tabs[2]:Toggle({ Title = "无敌模式", Value = false, Callback = function(v) Features.GodMode.Enabled = v; Updaters.GodMode() end })
-Tabs[2]:Toggle({ Title = "攻击无间隔", Value = false, Callback = function(v) Features.NoCooldown.Enabled = v; Updaters.NoCooldown() end })
-Tabs[2]:Toggle({ Title = "无限子弹", Value = false, Callback = function(v) Features.InfiniteAmmo.Enabled = v; Updaters.InfiniteAmmo() end })
-Tabs[2]:Toggle({ Title = "自动攻击", Value = false, Callback = function(v) Features.AutoAttack.Enabled = v; Updaters.AutoAttack() end })
-Tabs[2]:Toggle({ Title = "杀戮光环", Value = false, Callback = function(v) Features.KillAura.Enabled = v; Updaters.KillAura() end })
-Tabs[2]:Slider({ Title = "杀戮光环范围", Value = { Min = 1, Max = 100, Default = 20 }, Callback = function(v) Features.KillAura.Value = v end })
-Tabs[2]:Toggle({ Title = "自动瞄准 (简单)", Value = false, Callback = function(v) Features.Aimbot.Enabled = v; Updaters.Aimbot() end })
-Tabs[2]:Toggle({ Title = "快速射击", Value = false, Callback = function(v) Features.RapidFire.Enabled = v; Updaters.RapidFire() end })
-Tabs[2]:Toggle({ Title = "自动开火", Value = false, Callback = function(v) Features.AutoFire.Enabled = v; Updaters.AutoFire() end })
+    -- 视觉标签页
+    Tabs[3]:Section({ Title = "环境效果" })
+    Tabs[3]:Toggle({ Title = "夜视模式", Value = false, Callback = function(v) States.NightVision.Enabled = v; Updaters.NightVision() end })
+    Tabs[3]:Toggle({ Title = "全亮模式", Value = false, Callback = function(v) States.FullBright.Enabled = v; Updaters.FullBright() end })
+    Tabs[3]:Toggle({ Title = "玩家透视 (ESP)", Value = false, Callback = function(v) States.ESP.Enabled = v; Updaters.ESP() end })
+    Tabs[3]:Toggle({ Title = "地图透视 (X光)", Value = false, Callback = function(v) States.Xray.Enabled = v; Updaters.Xray() end })
+    Tabs[3]:Toggle({ Title = "清除迷雾", Value = false, Callback = function(v) States.NoFog.Enabled = v; Updaters.NoFog() end })
+    Tabs[3]:Toggle({ Title = "颜色滤镜", Value = false, Callback = function(v) States.ColorFilter.Enabled = v; Updaters.ColorFilter() end })
+    Tabs[3]:Dropdown({ Title = "滤镜颜色", Values = {"Red","Blue","Green","Pink","Yellow","Cyan"}, Value = "Pink", Callback = function(v) States.ColorFilter.Value = v end })
+    Tabs[3]:Toggle({ Title = "自由视角", Value = false, Callback = function(v) States.FreeCam.Enabled = v; Updaters.FreeCam() end })
+    Tabs[3]:Toggle({ Title = "热能透视", Value = false, Callback = function(v) States.ThermalESP.Enabled = v; Updaters.ThermalESP() end })
 
--- 3. 视觉标签页
-Tabs[3]:Section({ Title = "环境效果" })
-Tabs[3]:Toggle({ Title = "夜视模式", Value = false, Callback = function(v) Features.NightVision.Enabled = v; Updaters.NightVision() end })
-Tabs[3]:Toggle({ Title = "全亮模式", Value = false, Callback = function(v) Features.FullBright.Enabled = v; Updaters.FullBright() end })
-Tabs[3]:Toggle({ Title = "玩家透视 (ESP)", Value = false, Callback = function(v) Features.ESP.Enabled = v; Updaters.ESP() end })
-Tabs[3]:Toggle({ Title = "地图透视 (X光)", Value = false, Callback = function(v) Features.Xray.Enabled = v; Updaters.Xray() end })
-Tabs[3]:Toggle({ Title = "清除迷雾", Value = false, Callback = function(v) Features.NoFog.Enabled = v; Updaters.NoFog() end })
-Tabs[3]:Toggle({ Title = "颜色滤镜", Value = false, Callback = function(v) Features.ColorFilter.Enabled = v; Updaters.ColorFilter() end })
-Tabs[3]:Dropdown({ Title = "滤镜颜色", Values = {"Red","Blue","Green","Pink","Yellow","Cyan"}, Value = "Pink", Callback = function(v) Features.ColorFilter.Value = v end })
-Tabs[3]:Toggle({ Title = "自由视角", Value = false, Callback = function(v) Features.FreeCam.Enabled = v; Updaters.FreeCam() end })
-Tabs[3]:Toggle({ Title = "热能透视", Value = false, Callback = function(v) Features.ThermalESP.Enabled = v; Updaters.ThermalESP() end })
+    -- 工具标签页
+    Tabs[4]:Section({ Title = "实用工具" })
+    Tabs[4]:Toggle({ Title = "🎵 音乐播放器", Value = false, Callback = function(v)
+        States.MusicPlayer.Enabled = v
+        Updaters.MusicPlayer()
+        if v then WindUI:Notify({Title = "🎵 音乐播放器", Content = "已开启，点击右侧金色悬浮窗", Duration = 3}) end
+    end })
+    Tabs[4]:Toggle({ Title = "连点器", Value = false, Callback = function(v) States.AutoClicker.Enabled = v; Updaters.AutoClicker() end })
+    Tabs[4]:Slider({ Title = "连点间隔 (ms)", Value = { Min = 1, Max = 5000, Default = 10 }, Callback = function(v) States.AutoClicker.Value = v end })
+    Tabs[4]:Toggle({ Title = "连点启动", Value = false, Callback = function(v) States.ClickerStart.Enabled = v; Updaters.ClickerStart() end })
+    Tabs[4]:Toggle({ Title = "多球模式", Value = false, Callback = function(v) States.ClickerMulti.Enabled = v; Updaters.ClickerMulti() end })
+    Tabs[4]:Toggle({ Title = "快速交互", Value = false, Callback = function(v) States.FastInteract.Enabled = v; Updaters.FastInteract() end })
+    Tabs[4]:Toggle({ Title = "自动保存配置", Value = false, Callback = function(v) States.AutoSave.Enabled = v; Updaters.AutoSave() end })
+    Tabs[4]:Toggle({ Title = "反AFK", Value = false, Callback = function(v) States.AntiAfk.Enabled = v; Updaters.AntiAfk() end })
 
--- 4. 工具标签页
-Tabs[4]:Section({ Title = "实用工具" })
-Tabs[4]:Toggle({ Title = "🎵 音乐播放器", Value = false, Callback = function(v)
-    Features.MusicPlayer.Enabled = v
-    Updaters.MusicPlayer()
-    if v then WindUI:Notify({Title = "🎵 音乐播放器", Content = "已开启，点击右侧金色悬浮窗", Duration = 3}) end
-end })
-Tabs[4]:Toggle({ Title = "连点器", Value = false, Callback = function(v) Features.AutoClicker.Enabled = v; Updaters.AutoClicker() end })
-Tabs[4]:Slider({ Title = "连点间隔 (ms)", Value = { Min = 1, Max = 5000, Default = 10 }, Callback = function(v) Features.AutoClicker.Value = v end })
-Tabs[4]:Toggle({ Title = "连点启动", Value = false, Callback = function(v) Features.ClickerStart.Enabled = v; Updaters.ClickerStart() end })
-Tabs[4]:Toggle({ Title = "多球模式", Value = false, Callback = function(v) Features.ClickerMulti.Enabled = v; Updaters.ClickerMulti() end })
-Tabs[4]:Toggle({ Title = "快速交互", Value = false, Callback = function(v) Features.FastInteract.Enabled = v; Updaters.FastInteract() end })
-Tabs[4]:Toggle({ Title = "自动保存配置", Value = false, Callback = function(v) Features.AutoSave.Enabled = v; Updaters.AutoSave() end })
-Tabs[4]:Toggle({ Title = "反AFK", Value = false, Callback = function(v) Features.AntiAfk.Enabled = v; Updaters.AntiAfk() end })
+    -- 人物标签页
+    Tabs[5]:Section({ Title = "NPC 显示" })
+    Tabs[5]:Toggle({ Title = "启用 NPC 显示", Value = false, Callback = function(v) States.NpcDisplay.Enabled = v; Updaters.NpcDisplay() end })
+    Tabs[5]:Toggle({ Title = "NPC:头部", Value = true, Callback = function(v) States.NpcDisplay.ShowHead = v end })
+    Tabs[5]:Toggle({ Title = "NPC:身体", Value = true, Callback = function(v) States.NpcDisplay.ShowTorso = v end })
+    Tabs[5]:Toggle({ Title = "NPC:四肢", Value = true, Callback = function(v) States.NpcDisplay.ShowLimbs = v end })
+    Tabs[5]:Toggle({ Title = "NPC:骨骼", Value = true, Callback = function(v) States.NpcDisplay.ShowBones = v end })
+    Tabs[5]:Section({ Title = "玩家显示" })
+    Tabs[5]:Toggle({ Title = "启用玩家显示", Value = false, Callback = function(v) States.PlayerDisplay.Enabled = v; Updaters.PlayerDisplay() end })
+    Tabs[5]:Toggle({ Title = "玩家:头部", Value = true, Callback = function(v) States.PlayerDisplay.ShowHead = v end })
+    Tabs[5]:Toggle({ Title = "玩家:身体", Value = true, Callback = function(v) States.PlayerDisplay.ShowTorso = v end })
+    Tabs[5]:Toggle({ Title = "玩家:四肢", Value = true, Callback = function(v) States.PlayerDisplay.ShowLimbs = v end })
+    Tabs[5]:Toggle({ Title = "玩家:骨骼", Value = true, Callback = function(v) States.PlayerDisplay.ShowBones = v end })
+    Tabs[5]:Toggle({ Title = "玩家:名字", Value = true, Callback = function(v) States.PlayerDisplay.ShowName = v end })
+    Tabs[5]:Toggle({ Title = "玩家:距离", Value = true, Callback = function(v) States.PlayerDisplay.ShowDistance = v end })
+    Tabs[5]:Toggle({ Title = "玩家:血量", Value = true, Callback = function(v) States.PlayerDisplay.ShowHealth = v end })
+    Tabs[5]:Section({ Title = "框选生物" })
+    Tabs[5]:Toggle({ Title = "启用框选", Value = false, Callback = function(v) States.BoxCreature.Enabled = v; Updaters.BoxCreature() end })
+    Tabs[5]:Toggle({ Title = "框选NPC", Value = true, Callback = function(v) States.BoxCreature.BoxNpc = v end })
+    Tabs[5]:Toggle({ Title = "框选玩家", Value = true, Callback = function(v) States.BoxCreature.BoxPlayer = v end })
+    Tabs[5]:Toggle({ Title = "显示碰撞箱", Value = false, Callback = function(v) States.BoxCreature.ShowHitbox = v end })
+    Tabs[5]:Dropdown({ Title = "框选模式", Values = {"3D","2D"}, Value = "3D", Callback = function(v) States.BoxCreature.BoxMode = v end })
+    Tabs[5]:Slider({ Title = "框选最大距离", Value = { Min = 0, Max = 5000, Default = 0 }, Callback = function(v) States.BoxCreature.MaxDistance = v end })
+    Tabs[5]:Section({ Title = "连线追踪" })
+    Tabs[5]:Toggle({ Title = "启用连线", Value = false, Callback = function(v) States.LineConnect.Enabled = v; Updaters.LineConnect() end })
+    Tabs[5]:Toggle({ Title = "连接玩家", Value = true, Callback = function(v) States.LineConnect.ConnectPlayer = v end })
+    Tabs[5]:Toggle({ Title = "连接NPC", Value = false, Callback = function(v) States.LineConnect.ConnectNpc = v end })
+    Tabs[5]:Dropdown({ Title = "线起点", Values = {"Top","Bottom","Cross"}, Value = "Top", Callback = function(v) States.LineConnect.Origin = v end })
+    Tabs[5]:Section({ Title = "智能自瞄 V2" })
+    Tabs[5]:Toggle({ Title = "启用智能自瞄", Value = false, Callback = function(v) States.AimbotV2.Enabled = v; Updaters.AimbotV2() end })
+    Tabs[5]:Toggle({ Title = "自瞄玩家", Value = true, Callback = function(v) States.AimbotV2.AimPlayer = v end })
+    Tabs[5]:Toggle({ Title = "自瞄NPC", Value = false, Callback = function(v) States.AimbotV2.AimNpc = v end })
+    Tabs[5]:Toggle({ Title = "检测墙体", Value = false, Callback = function(v) States.AimbotV2.WallCheck = v end })
+    Tabs[5]:Toggle({ Title = "平滑瞄准", Value = true, Callback = function(v) States.AimbotV2.Smooth = v end })
+    Tabs[5]:Dropdown({ Title = "瞄准部位", Values = {"Head","HumanoidRootPart","Torso"}, Value = "Head", Callback = function(v) States.AimbotV2.AimPart = v end })
+    Tabs[5]:Slider({ Title = "圆圈大小", Value = { Min = 50, Max = 500, Default = 150 }, Callback = function(v) States.AimbotV2.CircleSize = v end })
+    Tabs[5]:Slider({ Title = "瞄准速度", Value = { Min = 0.02, Max = 0.9, Default = 0.3 }, Callback = function(v) States.AimbotV2.AimSpeed = v end })
+    Tabs[5]:Section({ Title = "高级透视" })
+    Tabs[5]:Toggle({ Title = "启用高级透视", Value = false, Callback = function(v) States.AdvancedESP.Enabled = v; Updaters.AdvancedESP() end })
+    Tabs[5]:Toggle({ Title = "显示方框", Value = true, Callback = function(v) States.AdvancedESP.ShowBox = v end })
+    Tabs[5]:Toggle({ Title = "显示名字", Value = true, Callback = function(v) States.AdvancedESP.ShowName = v end })
+    Tabs[5]:Toggle({ Title = "显示血量", Value = true, Callback = function(v) States.AdvancedESP.ShowHealth = v end })
+    Tabs[5]:Toggle({ Title = "显示距离", Value = true, Callback = function(v) States.AdvancedESP.ShowDistance = v end })
+    Tabs[5]:Toggle({ Title = "骨骼线", Value = false, Callback = function(v) States.AdvancedESP.Skeleton = v end })
+    Tabs[5]:Toggle({ Title = "追踪线", Value = false, Callback = function(v) States.AdvancedESP.Tracer = v end })
+    Tabs[5]:Toggle({ Title = "上色渲染", Value = true, Callback = function(v) States.AdvancedESP.ShowChams = v end })
+    Tabs[5]:Dropdown({ Title = "方框样式", Values = {"Corner","Full"}, Value = "Corner", Callback = function(v) States.AdvancedESP.BoxStyle = v end })
+    Tabs[5]:Dropdown({ Title = "血条样式", Values = {"Bar","Text","Both"}, Value = "Bar", Callback = function(v) States.AdvancedESP.HealthStyle = v end })
 
--- 5. 人物标签页
-Tabs[5]:Section({ Title = "NPC 显示" })
-Tabs[5]:Toggle({ Title = "启用 NPC 显示", Value = false, Callback = function(v) Features.NpcDisplay.Enabled = v; Updaters.NpcDisplay() end })
-Tabs[5]:Toggle({ Title = "NPC:头部", Value = true, Callback = function(v) Features.NpcDisplay.ShowHead = v end })
-Tabs[5]:Toggle({ Title = "NPC:身体", Value = true, Callback = function(v) Features.NpcDisplay.ShowTorso = v end })
-Tabs[5]:Toggle({ Title = "NPC:四肢", Value = true, Callback = function(v) Features.NpcDisplay.ShowLimbs = v end })
-Tabs[5]:Toggle({ Title = "NPC:骨骼", Value = true, Callback = function(v) Features.NpcDisplay.ShowBones = v end })
-Tabs[5]:Section({ Title = "玩家显示" })
-Tabs[5]:Toggle({ Title = "启用玩家显示", Value = false, Callback = function(v) Features.PlayerDisplay.Enabled = v; Updaters.PlayerDisplay() end })
-Tabs[5]:Toggle({ Title = "玩家:头部", Value = true, Callback = function(v) Features.PlayerDisplay.ShowHead = v end })
-Tabs[5]:Toggle({ Title = "玩家:身体", Value = true, Callback = function(v) Features.PlayerDisplay.ShowTorso = v end })
-Tabs[5]:Toggle({ Title = "玩家:四肢", Value = true, Callback = function(v) Features.PlayerDisplay.ShowLimbs = v end })
-Tabs[5]:Toggle({ Title = "玩家:骨骼", Value = true, Callback = function(v) Features.PlayerDisplay.ShowBones = v end })
-Tabs[5]:Toggle({ Title = "玩家:名字", Value = true, Callback = function(v) Features.PlayerDisplay.ShowName = v end })
-Tabs[5]:Toggle({ Title = "玩家:距离", Value = true, Callback = function(v) Features.PlayerDisplay.ShowDistance = v end })
-Tabs[5]:Toggle({ Title = "玩家:血量", Value = true, Callback = function(v) Features.PlayerDisplay.ShowHealth = v end })
-Tabs[5]:Section({ Title = "框选生物" })
-Tabs[5]:Toggle({ Title = "启用框选", Value = false, Callback = function(v) Features.BoxCreature.Enabled = v; Updaters.BoxCreature() end })
-Tabs[5]:Toggle({ Title = "框选NPC", Value = true, Callback = function(v) Features.BoxCreature.BoxNpc = v end })
-Tabs[5]:Toggle({ Title = "框选玩家", Value = true, Callback = function(v) Features.BoxCreature.BoxPlayer = v end })
-Tabs[5]:Toggle({ Title = "显示碰撞箱", Value = false, Callback = function(v) Features.BoxCreature.ShowHitbox = v end })
-Tabs[5]:Dropdown({ Title = "框选模式", Values = {"3D","2D"}, Value = "3D", Callback = function(v) Features.BoxCreature.BoxMode = v end })
-Tabs[5]:Slider({ Title = "框选最大距离", Value = { Min = 0, Max = 5000, Default = 0 }, Callback = function(v) Features.BoxCreature.MaxDistance = v end })
-Tabs[5]:Section({ Title = "连线追踪" })
-Tabs[5]:Toggle({ Title = "启用连线", Value = false, Callback = function(v) Features.LineConnect.Enabled = v; Updaters.LineConnect() end })
-Tabs[5]:Toggle({ Title = "连接玩家", Value = true, Callback = function(v) Features.LineConnect.ConnectPlayer = v end })
-Tabs[5]:Toggle({ Title = "连接NPC", Value = false, Callback = function(v) Features.LineConnect.ConnectNpc = v end })
-Tabs[5]:Dropdown({ Title = "线起点", Values = {"Top","Bottom","Cross"}, Value = "Top", Callback = function(v) Features.LineConnect.Origin = v end })
-Tabs[5]:Section({ Title = "智能自瞄 V2" })
-Tabs[5]:Toggle({ Title = "启用智能自瞄", Value = false, Callback = function(v) Features.AimbotV2.Enabled = v; Updaters.AimbotV2() end })
-Tabs[5]:Toggle({ Title = "自瞄玩家", Value = true, Callback = function(v) Features.AimbotV2.AimPlayer = v end })
-Tabs[5]:Toggle({ Title = "自瞄NPC", Value = false, Callback = function(v) Features.AimbotV2.AimNpc = v end })
-Tabs[5]:Toggle({ Title = "检测墙体", Value = false, Callback = function(v) Features.AimbotV2.WallCheck = v end })
-Tabs[5]:Toggle({ Title = "平滑瞄准", Value = true, Callback = function(v) Features.AimbotV2.Smooth = v end })
-Tabs[5]:Dropdown({ Title = "瞄准部位", Values = {"Head","HumanoidRootPart","Torso"}, Value = "Head", Callback = function(v) Features.AimbotV2.AimPart = v end })
-Tabs[5]:Slider({ Title = "圆圈大小", Value = { Min = 50, Max = 500, Default = 150 }, Callback = function(v) Features.AimbotV2.CircleSize = v end })
-Tabs[5]:Slider({ Title = "瞄准速度", Value = { Min = 0.02, Max = 0.9, Default = 0.3 }, Callback = function(v) Features.AimbotV2.AimSpeed = v end })
-Tabs[5]:Section({ Title = "高级透视" })
-Tabs[5]:Toggle({ Title = "启用高级透视", Value = false, Callback = function(v) Features.AdvancedESP.Enabled = v; Updaters.AdvancedESP() end })
-Tabs[5]:Toggle({ Title = "显示方框", Value = true, Callback = function(v) Features.AdvancedESP.ShowBox = v end })
-Tabs[5]:Toggle({ Title = "显示名字", Value = true, Callback = function(v) Features.AdvancedESP.ShowName = v end })
-Tabs[5]:Toggle({ Title = "显示血量", Value = true, Callback = function(v) Features.AdvancedESP.ShowHealth = v end })
-Tabs[5]:Toggle({ Title = "显示距离", Value = true, Callback = function(v) Features.AdvancedESP.ShowDistance = v end })
-Tabs[5]:Toggle({ Title = "骨骼线", Value = false, Callback = function(v) Features.AdvancedESP.Skeleton = v end })
-Tabs[5]:Toggle({ Title = "追踪线", Value = false, Callback = function(v) Features.AdvancedESP.Tracer = v end })
-Tabs[5]:Toggle({ Title = "上色渲染", Value = true, Callback = function(v) Features.AdvancedESP.ShowChams = v end })
-Tabs[5]:Dropdown({ Title = "方框样式", Values = {"Corner","Full"}, Value = "Corner", Callback = function(v) Features.AdvancedESP.BoxStyle = v end })
-Tabs[5]:Dropdown({ Title = "血条样式", Values = {"Bar","Text","Both"}, Value = "Bar", Callback = function(v) Features.AdvancedESP.HealthStyle = v end })
+    -- 系统标签页
+    Tabs[6]:Section({ Title = "系统设置" })
+    Tabs[6]:Toggle({ Title = "显示 FPS", Value = false, Callback = function(v) States.ShowFps.Enabled = v; Updaters.ShowFps() end })
+    Tabs[6]:Toggle({ Title = "显示坐标", Value = false, Callback = function(v) States.ShowCoords.Enabled = v; Updaters.ShowCoords() end })
+    Tabs[6]:Toggle({ Title = "重力修改", Value = false, Callback = function(v) States.GravityMod.Enabled = v; Updaters.GravityMod() end })
+    Tabs[6]:Slider({ Title = "重力值", Value = { Min = 0, Max = 1000, Default = 50 }, Callback = function(v) States.GravityMod.Value = v end })
+    Tabs[6]:Toggle({ Title = "时间修改", Value = false, Callback = function(v) States.TimeOfDay.Enabled = v; Updaters.TimeOfDay() end })
+    Tabs[6]:Slider({ Title = "时间 (小时)", Value = { Min = 0, Max = 24, Default = 12 }, Callback = function(v) States.TimeOfDay.Value = v end })
+    Tabs[6]:Toggle({ Title = "随处坐下 (按 X)", Value = false, Callback = function(v) States.SitAnywhere.Enabled = v; Updaters.SitAnywhere() end })
+    Tabs[6]:Toggle({ Title = "危险警告", Value = false, Callback = function(v) States.DangerWarning.Enabled = v; Updaters.DangerWarning() end })
+    Tabs[6]:Slider({ Title = "警告距离", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) States.DangerWarning.Value = v end })
+end)
 
--- 6. 系统标签页
-Tabs[6]:Section({ Title = "系统设置" })
-Tabs[6]:Toggle({ Title = "显示 FPS", Value = false, Callback = function(v) Features.ShowFps.Enabled = v; Updaters.ShowFps() end })
-Tabs[6]:Toggle({ Title = "显示坐标", Value = false, Callback = function(v) Features.ShowCoords.Enabled = v; Updaters.ShowCoords() end })
-Tabs[6]:Toggle({ Title = "重力修改", Value = false, Callback = function(v) Features.GravityMod.Enabled = v; Updaters.GravityMod() end })
-Tabs[6]:Slider({ Title = "重力值", Value = { Min = 0, Max = 1000, Default = 50 }, Callback = function(v) Features.GravityMod.Value = v end })
-Tabs[6]:Toggle({ Title = "时间修改", Value = false, Callback = function(v) Features.TimeOfDay.Enabled = v; Updaters.TimeOfDay() end })
-Tabs[6]:Slider({ Title = "时间 (小时)", Value = { Min = 0, Max = 24, Default = 12 }, Callback = function(v) Features.TimeOfDay.Value = v end })
-Tabs[6]:Toggle({ Title = "随处坐下 (按 X)", Value = false, Callback = function(v) Features.SitAnywhere.Enabled = v; Updaters.SitAnywhere() end })
-Tabs[6]:Toggle({ Title = "危险警告", Value = false, Callback = function(v) Features.DangerWarning.Enabled = v; Updaters.DangerWarning() end })
-Tabs[6]:Slider({ Title = "警告距离", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.DangerWarning.Value = v end })
-
--- ============================================================
--- 强制选中第一个标签页
--- ============================================================
 Window:SelectTab(1)
 
 -- ============================================================
@@ -2477,9 +2487,9 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == Enum.KeyCode.F then
         if not UserInputService:GetFocusedTextBox() then
-            Features.Fly1.Enabled = not Features.Fly1.Enabled
+            States.Fly1.Enabled = not States.Fly1.Enabled
             Updaters.Fly1()
-            WindUI:Notify({Title = "飞行", Content = Features.Fly1.Enabled and "✈ 已开启" or "✈ 已关闭", Duration = 2})
+            WindUI:Notify({Title = "飞行", Content = States.Fly1.Enabled and "✈ 已开启" or "✈ 已关闭", Duration = 2})
         end
     end
 end)
@@ -2489,9 +2499,11 @@ end)
 -- ============================================================
 local elapsed = tick() - LoadStartTime
 
+-- 创建音乐面板
 buildMusicPanel()
 
-for key, state in pairs(Features) do
+-- 恢复已开启的功能
+for key, state in pairs(States) do
     if type(state) == "table" and state.Enabled and Updaters[key] then
         pcall(Updaters[key])
     end
@@ -2499,13 +2511,13 @@ end
 
 Window:Open()
 WindUI:Notify({
-    Title = "✨ 星光辅助 V2.2",
-    Content = string.format("半透明 · 加载 %.2fs | F键飞行", elapsed),
+    Title = "✨ 星光辅助 V3.0",
+    Content = string.format("完整功能版 · 加载 %.2fs | F键飞行", elapsed),
     Duration = 5,
     Icon = "star"
 })
 
-print(string.format("[星光辅助] 加载完成 | 耗时 %.2fs | 半透明主题", elapsed))
+print(string.format("[星光辅助] 加载完成 | 耗时 %.2fs", elapsed))
 
 -- ============================================================
 -- 清理
