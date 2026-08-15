@@ -2,6 +2,7 @@
 -- 加载 WindUI（统一界面库）
 -- ============================================================
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+print("WindUI 加载完成")
 
 -- ============================================================
 -- 服务与全局变量
@@ -16,6 +17,8 @@ local Workspace = game:GetService("Workspace")
 local MarketplaceService = game:GetService("MarketplaceService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
+
+print("服务初始化完成")
 
 -- ============================================================
 -- 功能状态表
@@ -85,6 +88,8 @@ Features.OriginalCameraZoom = LocalPlayer.CameraMaxZoomDistance
 Features.OriginalGravity = Workspace.Gravity
 Features.OriginalGameSpeed = RunService.GlobalTimeScale
 Features.OriginalFOV = Camera.FieldOfView
+
+print("功能状态初始化完成")
 
 -- ============================================================
 -- 照明状态管理
@@ -156,133 +161,11 @@ local function resetLighting()
     end
 end
 
--- 照明功能开关
-local nightVisionConnection = nil
-local fullbrightConnection = nil
-
-local function toggleNightVision(enable)
-    Features.NightVision = enable
-    if enable then
-        if not nightVisionConnection then
-            nightVisionConnection = RunService.RenderStepped:Connect(applyLightingFeatures)
-        end
-    else
-        if nightVisionConnection then
-            nightVisionConnection:Disconnect()
-            nightVisionConnection = nil
-        end
-    end
-    applyLightingFeatures()
-end
-
-local function toggleFullbright(enable)
-    Features.Fullbright = enable
-    if enable then
-        if not fullbrightConnection then
-            fullbrightConnection = RunService.RenderStepped:Connect(applyLightingFeatures)
-        end
-    else
-        if fullbrightConnection then
-            fullbrightConnection:Disconnect()
-            fullbrightConnection = nil
-        end
-    end
-    applyLightingFeatures()
-end
-
-local function toggleNoFog(enable)
-    Features.NoFog = enable
-    applyLightingFeatures()
-end
-
-local function toggleNoShadows(enable)
-    Features.NoShadows = enable
-    applyLightingFeatures()
-end
-
 -- ============================================================
--- 缓存分离（文本翻译 & 屏幕特效）
+-- 定义所有功能函数（按UI调用顺序，确保无遗漏）
 -- ============================================================
-local originalTextState = setmetatable({}, { __mode = "k" })
-local originalEffectState = setmetatable({}, { __mode = "k" })
 
-local function toggleNoScreenEffects(enable)
-    Features.NoScreenEffects = enable
-    local effectTypes = {"BloomEffect", "ColorCorrectionEffect", "MotionBlurEffect", "DepthOfFieldEffect", "BlurEffect"}
-    if enable then
-        for _, descendant in ipairs(Lighting:GetDescendants()) do
-            for _, typeName in ipairs(effectTypes) do
-                if descendant:IsA(typeName) and originalEffectState[descendant] == nil then
-                    originalEffectState[descendant] = descendant.Enabled
-                    descendant.Enabled = false
-                end
-            end
-        end
-    else
-        for obj, enabled in pairs(originalEffectState) do
-            if obj and obj.Parent then
-                pcall(function() obj.Enabled = enabled end)
-            end
-        end
-        table.clear(originalEffectState)
-    end
-end
-
--- ============================================================
--- 重生自动恢复
--- ============================================================
-local function reapplyAllFeatures()
-    task.wait(0.5)
-    local char = LocalPlayer.Character
-    if not char then return end
-    local humanoid = char:FindFirstChild("Humanoid")
-    local rootPart = char:FindFirstChild("HumanoidRootPart")
-    if not humanoid then return end
-
-    if Features.Speed then humanoid.WalkSpeed = Features.SpeedValue end
-    if Features.HighJump then humanoid.JumpPower = Features.JumpPower end
-
-    if Features.Flying then
-        task.spawn(function()
-            toggleFly(false)
-            task.wait(0.1)
-            toggleFly(true)
-        end)
-    end
-
-    if Features.NoClip then task.spawn(function() toggleNoClip(true) end) end
-    if Features.NoFallDamage then task.spawn(function() toggleNoFallDamage(true) end) end
-
-    if Features.ESP then
-        refreshAllPlayerESP()
-        if espUpdateConn then espUpdateConn:Disconnect() end
-        espUpdateConn = RunService.Heartbeat:Connect(updateESP)
-    end
-    if Features.ESPNPC then task.spawn(function() toggleESPNPC(true) end) end
-
-    if Features.NightVision or Features.Fullbright or Features.NoFog or Features.NoShadows then
-        applyLightingFeatures()
-        if Features.NightVision and not nightVisionConnection then
-            nightVisionConnection = RunService.RenderStepped:Connect(applyLightingFeatures)
-        end
-        if Features.Fullbright and not fullbrightConnection then
-            fullbrightConnection = RunService.RenderStepped:Connect(applyLightingFeatures)
-        end
-    end
-
-    if Features.NoScreenEffects then toggleNoScreenEffects(true) end
-    if Features.CustomFOV then Camera.FieldOfView = Features.FOVValue end
-    if Features.FreeCamera then LocalPlayer.CameraMaxZoomDistance = 200 end
-    if Features.CustomGravity then Workspace.Gravity = Features.GravityValue end
-    if Features.CustomGameSpeed then RunService.GlobalTimeScale = Features.GameSpeedValue end
-    if Features.SpinBot then task.spawn(function() toggleSpinBot(true) end) end
-end
-
-LocalPlayer.CharacterAdded:Connect(reapplyAllFeatures)
-
--- ============================================================
--- 1. 移动增强
--- ============================================================
+-- 移动增强（Speed, InfiniteJump, HighJump, Stamina, Gravity）
 function toggleSpeed(enable)
     local char = LocalPlayer.Character
     if not char then return end
@@ -370,9 +253,7 @@ function toggleCustomGravity(enable)
     end
 end
 
--- ============================================================
--- 2. 飞行
--- ============================================================
+-- 飞行
 local flyBodyVelocity, flyBodyGyro, flyConnection = nil, nil, nil
 
 local function onFlyHeartbeat()
@@ -478,9 +359,7 @@ function toggleFly(enable)
     end
 end
 
--- ============================================================
--- 3. 穿墙
--- ============================================================
+-- 穿墙
 local noclipCharConn, noclipAddedConn = nil, nil
 
 local function setNoClipOnCharacter(char, enabled)
@@ -521,9 +400,7 @@ function toggleNoClip(enable)
     end
 end
 
--- ============================================================
--- 4. 无摔落伤害
--- ============================================================
+-- 无摔落伤害
 local fallDamageConn = nil
 local function onHumanoidStateChanged(oldState, newState)
     if Features.NoFallDamage and newState == Enum.HumanoidStateType.FallingDown then
@@ -555,9 +432,288 @@ function toggleNoFallDamage(enable)
     end
 end
 
--- ============================================================
--- 5. ESP 系统
--- ============================================================
+-- 照明功能开关（夜视、全亮、去雾、去阴影）
+local nightVisionConnection = nil
+local fullbrightConnection = nil
+
+function toggleNightVision(enable)
+    Features.NightVision = enable
+    if enable then
+        if not nightVisionConnection then
+            nightVisionConnection = RunService.RenderStepped:Connect(applyLightingFeatures)
+        end
+    else
+        if nightVisionConnection then
+            nightVisionConnection:Disconnect()
+            nightVisionConnection = nil
+        end
+    end
+    applyLightingFeatures()
+end
+
+function toggleFullbright(enable)
+    Features.Fullbright = enable
+    if enable then
+        if not fullbrightConnection then
+            fullbrightConnection = RunService.RenderStepped:Connect(applyLightingFeatures)
+        end
+    else
+        if fullbrightConnection then
+            fullbrightConnection:Disconnect()
+            fullbrightConnection = nil
+        end
+    end
+    applyLightingFeatures()
+end
+
+function toggleNoFog(enable)
+    Features.NoFog = enable
+    applyLightingFeatures()
+end
+
+function toggleNoShadows(enable)
+    Features.NoShadows = enable
+    applyLightingFeatures()
+end
+
+-- 屏幕特效
+local originalEffectState = setmetatable({}, { __mode = "k" })
+
+function toggleNoScreenEffects(enable)
+    Features.NoScreenEffects = enable
+    local effectTypes = {"BloomEffect", "ColorCorrectionEffect", "MotionBlurEffect", "DepthOfFieldEffect", "BlurEffect"}
+    if enable then
+        for _, descendant in ipairs(Lighting:GetDescendants()) do
+            for _, typeName in ipairs(effectTypes) do
+                if descendant:IsA(typeName) and originalEffectState[descendant] == nil then
+                    originalEffectState[descendant] = descendant.Enabled
+                    descendant.Enabled = false
+                end
+            end
+        end
+    else
+        for obj, enabled in pairs(originalEffectState) do
+            if obj and obj.Parent then
+                pcall(function() obj.Enabled = enabled end)
+            end
+        end
+        table.clear(originalEffectState)
+    end
+end
+
+-- FOV 和 自由视角（之前缺失，现已补全）
+function toggleFOV(enable)
+    Features.CustomFOV = enable
+    if enable then
+        Camera.FieldOfView = Features.FOVValue
+    else
+        Camera.FieldOfView = Features.OriginalFOV
+    end
+end
+
+function toggleFreeCamera(enable)
+    Features.FreeCamera = enable
+    if enable then
+        LocalPlayer.CameraMaxZoomDistance = 200
+    else
+        LocalPlayer.CameraMaxZoomDistance = Features.OriginalCameraZoom
+    end
+end
+
+-- 自定义游戏速度
+function toggleCustomGameSpeed(enable)
+    Features.CustomGameSpeed = enable
+    if enable then
+        RunService.GlobalTimeScale = Features.GameSpeedValue
+    else
+        RunService.GlobalTimeScale = Features.OriginalGameSpeed
+    end
+end
+
+-- 自旋
+local spinConnection = nil
+function toggleSpinBot(enable)
+    Features.SpinBot = enable
+    if enable then
+        if spinConnection then spinConnection:Disconnect() end
+        spinConnection = RunService.RenderStepped:Connect(function()
+            if not Features.SpinBot then return end
+            local char = LocalPlayer.Character
+            local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+            if rootPart then
+                rootPart.CFrame = rootPart.CFrame * CFrame.Angles(0, math.rad(Features.SpinSpeed), 0)
+            end
+        end)
+    else
+        if spinConnection then
+            spinConnection:Disconnect()
+            spinConnection = nil
+        end
+    end
+end
+
+-- 自瞄系统（含按钮）
+local aimConnection, aimButton = nil, nil
+
+local function getClosestPlayer()
+    local closest, minDist = nil, math.huge
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+    local pos = root.Position
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local humanoid = player.Character:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                local targetRoot = player.Character:FindFirstChild(Features.AimPart) or player.Character:FindFirstChild("Torso")
+                if targetRoot then
+                    local dist = (pos - targetRoot.Position).Magnitude
+                    if dist < minDist then
+                        minDist = dist
+                        closest = player
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function aimLoop()
+    if not Features.Aimlock then return end
+    if not Features.AimTarget or not Features.AimTarget.Character or not Features.AimTarget.Character:FindFirstChild(Features.AimPart) then
+        Features.AimTarget = getClosestPlayer()
+        if not Features.AimTarget then
+            if aimButton and aimButton:FindFirstChild("TextLabel") then
+                aimButton.TextLabel.Text = "无"
+            end
+            return
+        end
+    end
+    local targetRoot = Features.AimTarget.Character:FindFirstChild(Features.AimPart) or Features.AimTarget.Character:FindFirstChild("Torso")
+    if targetRoot then
+        local targetCF = CFrame.new(Camera.CFrame.Position, targetRoot.Position)
+        Camera.CFrame = Camera.CFrame:Lerp(targetCF, Features.AimSmoothness)
+        if aimButton and aimButton:FindFirstChild("TextLabel") then
+            aimButton.TextLabel.Text = Features.AimTarget.Name:sub(1, 4)
+        end
+    end
+end
+
+function toggleAimlock(enable)
+    Features.Aimlock = enable
+    if enable then
+        if not aimConnection then
+            aimConnection = RunService.RenderStepped:Connect(aimLoop)
+        end
+        if aimButton and aimButton:FindFirstChild("TextLabel") then
+            aimButton.TextLabel.Text = "开"
+        end
+    else
+        if aimConnection then
+            aimConnection:Disconnect()
+            aimConnection = nil
+        end
+        Features.AimTarget = nil
+        if aimButton and aimButton:FindFirstChild("TextLabel") then
+            aimButton.TextLabel.Text = "关"
+        end
+    end
+end
+
+function createAimButton()
+    if aimButton and aimButton.Parent then return end
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "AimButtonGui"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = CoreGui
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 60, 0, 60)
+    frame.Position = UDim2.new(0.5, -30, 0.8, -30)
+    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    frame.BackgroundTransparency = 0.3
+    frame.BorderSizePixel = 0
+    frame.Parent = screenGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(1, 0)
+    corner.Parent = frame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Thickness = 2
+    stroke.Transparency = 0.5
+    stroke.Parent = frame
+
+    local text = Instance.new("TextLabel")
+    text.Size = UDim2.new(1, 0, 1, 0)
+    text.BackgroundTransparency = 1
+    text.Text = "关"
+    text.TextColor3 = Color3.fromRGB(255, 255, 255)
+    text.TextScaled = true
+    text.Font = Enum.Font.GothamBold
+    text.Parent = frame
+
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, 0, 1, 0)
+    button.BackgroundTransparency = 1
+    button.Text = ""
+    button.Parent = frame
+
+    local isDragging = false
+    local dragStartPos = nil
+    local startMousePos = nil
+    local moved = false
+
+    local function startDrag(inputPos)
+        isDragging = true
+        moved = false
+        dragStartPos = frame.Position
+        startMousePos = inputPos
+    end
+
+    local function updateDrag(inputPos)
+        if isDragging and startMousePos then
+            local delta = inputPos - startMousePos
+            if delta.Magnitude > 5 then moved = true end
+            frame.Position = UDim2.new(
+                dragStartPos.X.Scale,
+                dragStartPos.X.Offset + delta.X,
+                dragStartPos.Y.Scale,
+                dragStartPos.Y.Offset + delta.Y
+            )
+        end
+    end
+
+    local function endDrag()
+        if isDragging and not moved then
+            toggleAimlock(not Features.Aimlock)
+        end
+        isDragging = false
+    end
+
+    button.MouseButton1Down:Connect(function(x, y)
+        startDrag(Vector2.new(x, y))
+    end)
+    button.MouseMoved:Connect(function(x, y)
+        updateDrag(Vector2.new(x, y))
+    end)
+    button.MouseButton1Up:Connect(endDrag)
+
+    button.TouchBegan:Connect(function(touch)
+        startDrag(touch.Position)
+    end)
+    button.TouchMoved:Connect(function(touch)
+        updateDrag(touch.Position)
+    end)
+    button.TouchEnded:Connect(endDrag)
+
+    aimButton = frame
+end
+
+-- ESP 系统（包含 Tracer）
 local espObjects = {}
 local espUpdateConn, espPlayerAddedConn, npcScanThread = nil, nil, nil
 
@@ -729,7 +885,6 @@ function toggleESP(enable)
             end)
         end
     else
-        -- 先收集键再删除
         local keysToRemove = {}
         for key, data in pairs(espObjects) do
             if not data.isNPC then
@@ -797,172 +952,7 @@ function toggleESPNPC(enable)
     end
 end
 
--- ============================================================
--- 6. 自瞄
--- ============================================================
-local aimConnection, aimButton = nil, nil
-
-local function getClosestPlayer()
-    local closest, minDist = nil, math.huge
-    local char = LocalPlayer.Character
-    if not char then return nil end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return nil end
-    local pos = root.Position
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
-            local humanoid = player.Character:FindFirstChild("Humanoid")
-            if humanoid and humanoid.Health > 0 then
-                local targetRoot = player.Character:FindFirstChild(Features.AimPart) or player.Character:FindFirstChild("Torso")
-                if targetRoot then
-                    local dist = (pos - targetRoot.Position).Magnitude
-                    if dist < minDist then
-                        minDist = dist
-                        closest = player
-                    end
-                end
-            end
-        end
-    end
-    return closest
-end
-
-local function aimLoop()
-    if not Features.Aimlock then return end
-    if not Features.AimTarget or not Features.AimTarget.Character or not Features.AimTarget.Character:FindFirstChild(Features.AimPart) then
-        Features.AimTarget = getClosestPlayer()
-        if not Features.AimTarget then
-            if aimButton and aimButton:FindFirstChild("TextLabel") then
-                aimButton.TextLabel.Text = "无"
-            end
-            return
-        end
-    end
-    local targetRoot = Features.AimTarget.Character:FindFirstChild(Features.AimPart) or Features.AimTarget.Character:FindFirstChild("Torso")
-    if targetRoot then
-        local targetCF = CFrame.new(Camera.CFrame.Position, targetRoot.Position)
-        Camera.CFrame = Camera.CFrame:Lerp(targetCF, Features.AimSmoothness)
-        if aimButton and aimButton:FindFirstChild("TextLabel") then
-            aimButton.TextLabel.Text = Features.AimTarget.Name:sub(1, 4)
-        end
-    end
-end
-
-function toggleAimlock(enable)
-    Features.Aimlock = enable
-    if enable then
-        if not aimConnection then
-            aimConnection = RunService.RenderStepped:Connect(aimLoop)
-        end
-        if aimButton and aimButton:FindFirstChild("TextLabel") then
-            aimButton.TextLabel.Text = "开"
-        end
-    else
-        if aimConnection then
-            aimConnection:Disconnect()
-            aimConnection = nil
-        end
-        Features.AimTarget = nil
-        if aimButton and aimButton:FindFirstChild("TextLabel") then
-            aimButton.TextLabel.Text = "关"
-        end
-    end
-end
-
-function createAimButton()
-    if aimButton and aimButton.Parent then return end
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "AimButtonGui"
-    screenGui.ResetOnSpawn = false
-    screenGui.Parent = CoreGui
-
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 60, 0, 60)
-    frame.Position = UDim2.new(0.5, -30, 0.8, -30)
-    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    frame.BackgroundTransparency = 0.3
-    frame.BorderSizePixel = 0
-    frame.Parent = screenGui
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(1, 0)
-    corner.Parent = frame
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(255, 255, 255)
-    stroke.Thickness = 2
-    stroke.Transparency = 0.5
-    stroke.Parent = frame
-
-    local text = Instance.new("TextLabel")
-    text.Size = UDim2.new(1, 0, 1, 0)
-    text.BackgroundTransparency = 1
-    text.Text = "关"
-    text.TextColor3 = Color3.fromRGB(255, 255, 255)
-    text.TextScaled = true
-    text.Font = Enum.Font.GothamBold
-    text.Parent = frame
-
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 1, 0)
-    button.BackgroundTransparency = 1
-    button.Text = ""
-    button.Parent = frame
-
-    local isDragging = false
-    local dragStartPos = nil
-    local startMousePos = nil
-    local moved = false
-
-    local function startDrag(inputPos)
-        isDragging = true
-        moved = false
-        dragStartPos = frame.Position
-        startMousePos = inputPos
-    end
-
-    local function updateDrag(inputPos)
-        if isDragging and startMousePos then
-            local delta = inputPos - startMousePos
-            if delta.Magnitude > 5 then moved = true end
-            frame.Position = UDim2.new(
-                dragStartPos.X.Scale,
-                dragStartPos.X.Offset + delta.X,
-                dragStartPos.Y.Scale,
-                dragStartPos.Y.Offset + delta.Y
-            )
-        end
-    end
-
-    local function endDrag()
-        if isDragging and not moved then
-            toggleAimlock(not Features.Aimlock)
-        end
-        isDragging = false
-    end
-
-    button.MouseButton1Down:Connect(function(x, y)
-        startDrag(Vector2.new(x, y))
-    end)
-    button.MouseMoved:Connect(function(x, y)
-        updateDrag(Vector2.new(x, y))
-    end)
-    button.MouseButton1Up:Connect(endDrag)
-
-    button.TouchBegan:Connect(function(touch)
-        startDrag(touch.Position)
-    end)
-    button.TouchMoved:Connect(function(touch)
-        updateDrag(touch.Position)
-    end)
-    button.TouchEnded:Connect(endDrag)
-
-    aimButton = frame
-end
-
--- ============================================================
--- 7. FPS/Ping 悬浮窗
--- ============================================================
+-- FPS/Ping 悬浮窗
 local fpsGui = nil
 local fpsPingConnection = nil
 local fpsInputConnections = {}
@@ -1020,7 +1010,7 @@ function toggleFPSPing(enable)
     pingLabel.TextScaled = true
     pingLabel.Parent = frame
 
-    -- 拖动
+    -- 拖动支持
     local isDragging = false
     local dragStartPos, startMousePos, moved = nil, nil, false
 
@@ -1093,45 +1083,11 @@ function toggleFPSPing(enable)
     end)
 end
 
--- ============================================================
--- 8. 自定义游戏速度 & 自旋
--- ============================================================
-function toggleCustomGameSpeed(enable)
-    Features.CustomGameSpeed = enable
-    if enable then
-        RunService.GlobalTimeScale = Features.GameSpeedValue
-    else
-        RunService.GlobalTimeScale = Features.OriginalGameSpeed
-    end
-end
-
-local spinConnection = nil
-function toggleSpinBot(enable)
-    Features.SpinBot = enable
-    if enable then
-        if spinConnection then spinConnection:Disconnect() end
-        spinConnection = RunService.RenderStepped:Connect(function()
-            if not Features.SpinBot then return end
-            local char = LocalPlayer.Character
-            local rootPart = char and char:FindFirstChild("HumanoidRootPart")
-            if rootPart then
-                rootPart.CFrame = rootPart.CFrame * CFrame.Angles(0, math.rad(Features.SpinSpeed), 0)
-            end
-        end)
-    else
-        if spinConnection then
-            spinConnection:Disconnect()
-            spinConnection = nil
-        end
-    end
-end
-
--- ============================================================
--- 9. 翻译系统
--- ============================================================
+-- 翻译系统
 local translationGeneration = 0
 local translationInFlight = {}
 local translationCache = {}
+local originalTextState = setmetatable({}, { __mode = "k" })
 
 local function isEnglish(text)
     if not text or text == "" then return false end
@@ -1252,9 +1208,7 @@ function toggleTranslation(enable)
     end)
 end
 
--- ============================================================
--- 10. 自动重连 & 反AFK
--- ============================================================
+-- 自动重连 & 反AFK
 local autoReconnectConn = nil
 function toggleAutoReconnect(enable)
     Features.AutoReconnect = enable
@@ -1300,9 +1254,7 @@ function toggleAntiAFK(enable)
     end)
 end
 
--- ============================================================
--- 11. 工具函数
--- ============================================================
+-- 工具函数
 function showPlayerInfo()
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -1345,9 +1297,7 @@ function showServerRegion()
     end)
 end
 
--- ============================================================
--- 12. 瞬移系统
--- ============================================================
+-- 瞬移系统
 function saveCurrentPos()
     local char = LocalPlayer.Character
     if not char then return end
@@ -1455,9 +1405,7 @@ function toggleTeleportLoop(enable)
     WindUI:Notify({ Title = "循环传送", Content = "已开启，间隔 " .. Features.TeleportInterval .. " 秒", Duration = 2 })
 end
 
--- ============================================================
--- 13. 配置导入/导出
--- ============================================================
+-- 配置导入导出
 local function packValue(value)
     local t = typeof(value)
     if t == "Color3" then
@@ -1528,7 +1476,7 @@ function importConfig()
 end
 
 -- ============================================================
--- 构建 WindUI 窗口
+-- 重写 UI 构建部分（确保所有回调都安全）
 -- ============================================================
 local Window = WindUI:CreateWindow({
     Title = "综合学习辅助 (融合增强版)",
@@ -1542,6 +1490,8 @@ local Window = WindUI:CreateWindow({
     HasOutline = true,
 })
 
+print("主窗口创建成功")
+
 local Tabs = {
     Player = Window:Tab({ Title = "玩家", Icon = "user" }),
     Movement = Window:Tab({ Title = "移动", Icon = "move" }),
@@ -1552,7 +1502,9 @@ local Tabs = {
     Misc = Window:Tab({ Title = "杂项", Icon = "settings" }),
 }
 
--- ========== 玩家标签页 ==========
+print("标签页创建完成")
+
+-- 使用 pcall 包裹每个标签页的内容，防止个别错误阻断整体
 pcall(function()
     Tabs.Player:Section({ Title = "实用工具" })
     Tabs.Player:Button({ Title = "杀死自己 (快速重生)", Callback = killSelf })
@@ -1563,7 +1515,6 @@ pcall(function()
     Tabs.Player:Slider({ Title = "游戏速度倍数", Value = { Min = 0.1, Max = 3, Default = 1, Step = 0.1 }, Callback = function(v) Features.GameSpeedValue = v if Features.CustomGameSpeed then RunService.GlobalTimeScale = v end end })
 end)
 
--- ========== 移动标签页 ==========
 pcall(function()
     Tabs.Movement:Section({ Title = "基础移动增强" })
     Tabs.Movement:Toggle({ Title = "加速移动", Value = false, Callback = function(s) toggleSpeed(s) end })
@@ -1596,7 +1547,6 @@ pcall(function()
     Tabs.Movement:Slider({ Title = "重力数值", Value = { Min = 0, Max = 300, Default = 196.2 }, Callback = function(v) Features.GravityValue = v if Features.CustomGravity then Workspace.Gravity = v end end })
 end)
 
--- ========== 视觉标签页 ==========
 pcall(function()
     Tabs.Visual:Section({ Title = "玩家透视 & 自瞄" })
     Tabs.Visual:Toggle({ Title = "启用 ESP", Value = false, Callback = function(s) toggleESP(s) end })
@@ -1605,7 +1555,6 @@ pcall(function()
         Value = false,
         Callback = function(s)
             Features.ESPTracer = s
-            -- 收集所有键再清除
             local keys = {}
             for key in pairs(espObjects) do
                 table.insert(keys, key)
@@ -1702,14 +1651,12 @@ pcall(function()
     Tabs.Visual:Slider({ Title = "自旋速度", Value = { Min = 10, Max = 360, Default = 50 }, Callback = function(v) Features.SpinSpeed = v end })
 end)
 
--- ========== 翻译标签页 ==========
 pcall(function()
     Tabs.Translation:Section({ Title = "UI 自动翻译 (英→中)" })
     Tabs.Translation:Toggle({ Title = "启用翻译", Value = false, Callback = function(s) toggleTranslation(s) end })
     Tabs.Translation:Button({ Title = "清空翻译缓存并恢复原文本", Callback = function() restoreAllTexts() WindUI:Notify({ Title = "缓存已清空，原文本已恢复", Duration = 2 }) end })
 end)
 
--- ========== 服务器标签页 ==========
 pcall(function()
     Tabs.Server:Section({ Title = "服务器状态" })
     local serverInfoPara = Tabs.Server:Paragraph({
@@ -1758,7 +1705,6 @@ pcall(function()
     Tabs.Server:Button({ Title = "查询服务器地区", Callback = showServerRegion })
 end)
 
--- ========== 瞬移标签页 ==========
 pcall(function()
     Tabs.Teleport:Section({ Title = "坐标管理" })
     local coordDesc = Tabs.Teleport:Paragraph({
@@ -1843,7 +1789,6 @@ pcall(function()
     })
 end)
 
--- ========== 杂项标签页 ==========
 pcall(function()
     Tabs.Misc:Section({ Title = "系统" })
     Tabs.Misc:Dropdown({
@@ -1963,4 +1908,4 @@ Players.PlayerRemoving:Connect(function(player)
     if player == LocalPlayer then cleanup() end
 end)
 
-print("脚本加载完成！")
+print("脚本加载完成！UI 已显示")
