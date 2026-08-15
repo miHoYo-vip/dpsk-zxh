@@ -1,5 +1,5 @@
 -- ============================================================
--- 星光辅助 V2.1 · 修复移动端标签页不显示问题
+-- 星光辅助 V2.2 · 半透明 · 移动端优化
 -- ============================================================
 
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
@@ -21,7 +21,6 @@ local Lighting = game:GetService("Lighting")
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
 local Workspace = game:GetService("Workspace")
-local MarketplaceService = game:GetService("MarketplaceService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local GuiService = game:GetService("GuiService")
 local Stats = game:GetService("Stats")
@@ -31,7 +30,6 @@ local player = LocalPlayer
 
 local LoadStartTime = tick()
 
--- 金黄色配色
 local C = {
     Gold = Color3.fromRGB(255, 215, 0),
     GoldDark = Color3.fromRGB(184, 134, 11),
@@ -101,7 +99,6 @@ local Features = {
     LineConnect = {Enabled = false, ConnectNpc = false, ConnectPlayer = true, ConnectOther = false, LineWallCheck = false, Origin = "Top", MaxDistance = 0},
     AimbotV2 = {Enabled = false, AimPlayer = true, AimNpc = false, AimOther = false, AimPart = "Head", CircleSize = 150, AimSpeed = 0.3, WallCheck = false, TeamCheck = false, AliveCheck = true, Smooth = true, Predict = false, CustomTarget = nil, MaxDistance = 0},
     AdvancedESP = {Enabled = false, ShowBox = true, BoxStyle = "Corner", BoxThickness = 1, ShowName = true, ShowHealth = true, ShowDistance = true, HealthStyle = "Bar", ShowChams = true, TeamCheck = false, ShowTeam = false, WallCheck = false, Tracer = false, TracerOrigin = "Bottom", Skeleton = false, MaxDistance = 300},
-    DynamicIsland = {Enabled = true},
     ShowFps = {Enabled = false},
     ShowCoords = {Enabled = false},
     GravityMod = {Enabled = false, Value = 50, Default = 196.2},
@@ -497,7 +494,7 @@ local function clearRenderCache()
 end
 
 -- ============================================================
--- 音乐播放器（仅保留核心，避免干扰）
+-- 音乐播放器
 -- ============================================================
 local MusicDir = "/storage/emulated/0/Delta/StarMusic"
 local Music = {
@@ -889,7 +886,7 @@ local function buildMusicPanel()
 end
 
 -- ============================================================
--- 功能实现 Updaters（精简但完整）
+-- 功能实现 Updaters（精简版）
 -- ============================================================
 
 Updaters.WalkSpeed = function()
@@ -2314,172 +2311,164 @@ Updaters.DangerWarning = function()
     end
 end
 
--- 灵动岛
-Updaters.DynamicIsland = function() end
-
 -- ============================================================
--- 使用 WindUI 的 Section 和 Toggle 构建 UI（不用 Tab）
+-- 构建 WindUI 窗口（半透明 + 强制标签页）
 -- ============================================================
 local Window = WindUI:CreateWindow({
-    Title = "星光辅助 · 融合版",
+    Title = "✨ 星光辅助 V2.2",
     Icon = "star",
-    Author = "星光 · 移植 Ninja Hub",
+    Author = "半透明 · 移动优化",
     Folder = "StarAux",
-    Size = UDim2.fromOffset(400, 520),
-    Transparent = false,
+    Size = UDim2.fromOffset(420, 560),
+    Transparent = true,   -- 开启半透明
     Theme = "StarGold",
-    SideBarWidth = 0,
+    SideBarWidth = 160,
     HasOutline = true,
 })
 
--- 用下拉菜单切换分类
-local categories = {
-    "移动",
-    "战斗",
-    "视觉",
-    "工具",
-    "人物",
-    "系统"
-}
+-- 创建所有标签页（强制使用 Tab）
+local Tabs = {}
+local tabNames = {"移动", "战斗", "视觉", "工具", "人物", "系统"}
+local tabIcons = {"move", "sword", "eye", "wrench", "user", "settings"}
 
-local currentCategory = "移动"
-local contentContainer = nil
-
--- 创建分类切换下拉
-Window:Section({ Title = "分类导航" })
-Window:Dropdown({
-    Title = "选择功能分类",
-    Values = categories,
-    Value = "移动",
-    Callback = function(v)
-        currentCategory = v
-        rebuildContent()
-    end
-})
-
--- 创建内容容器（动态刷新）
-local function rebuildContent()
-    if contentContainer then
-        contentContainer:Destroy()
-    end
-    contentContainer = Window:Section({ Title = currentCategory .. " · 功能列表" })
-
-    if currentCategory == "移动" then
-        contentContainer:Toggle({ Title = "加速移动", Value = false, Callback = function(v) Features.WalkSpeed.Enabled = v; Updaters.WalkSpeed() end })
-        contentContainer:Slider({ Title = "移动速度", Value = { Min = 1, Max = 500, Default = 100 }, Callback = function(v) Features.WalkSpeed.Value = v end })
-        contentContainer:Toggle({ Title = "传送行走", Value = false, Callback = function(v) Features.TpWalk.Enabled = v; Updaters.TpWalk() end })
-        contentContainer:Slider({ Title = "传送距离", Value = { Min = 1, Max = 100, Default = 2 }, Callback = function(v) Features.TpWalk.Value = v end })
-        contentContainer:Toggle({ Title = "飞行模式 (F键)", Value = false, Callback = function(v) Features.Fly1.Enabled = v; Updaters.Fly1() end })
-        contentContainer:Slider({ Title = "飞行速度", Value = { Min = 1, Max = 500, Default = 45 }, Callback = function(v) Features.Fly1.Value = v end })
-        contentContainer:Toggle({ Title = "飞行模式2 (WASD+EQ)", Value = false, Callback = function(v) Features.Fly2.Enabled = v; Updaters.Fly2() end })
-        contentContainer:Slider({ Title = "飞行速度2", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.Fly2.Value = v end })
-        contentContainer:Toggle({ Title = "自由移动", Value = false, Callback = function(v) Features.FreeMove.Enabled = v; Updaters.FreeMove() end })
-        contentContainer:Slider({ Title = "自由移动速度", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.FreeMove.Value = v end })
-        contentContainer:Toggle({ Title = "穿墙 (NoClip)", Value = false, Callback = function(v) Features.Noclip.Enabled = v; Updaters.Noclip() end })
-        contentContainer:Toggle({ Title = "超级连跳", Value = false, Callback = function(v) Features.BunnyHop.Enabled = v; Updaters.BunnyHop() end })
-        contentContainer:Slider({ Title = "连跳增量", Value = { Min = 1, Max = 100, Default = 5 }, Callback = function(v) Features.BunnyHop.Value = v end })
-        contentContainer:Toggle({ Title = "跳高修改", Value = false, Callback = function(v) Features.JumpHeight.Enabled = v; Updaters.JumpHeight() end })
-        contentContainer:Slider({ Title = "跳跃高度", Value = { Min = 1, Max = 500, Default = 100 }, Callback = function(v) Features.JumpHeight.Value = v end })
-        contentContainer:Toggle({ Title = "自动奔跑", Value = false, Callback = function(v) Features.AutoRun.Enabled = v; Updaters.AutoRun() end })
-        contentContainer:Toggle({ Title = "超级跳跃", Value = false, Callback = function(v) Features.SuperJump.Enabled = v; Updaters.SuperJump() end })
-        contentContainer:Slider({ Title = "超级跳跃力度", Value = { Min = 1, Max = 500, Default = 200 }, Callback = function(v) Features.SuperJump.Value = v end })
-        contentContainer:Toggle({ Title = "爬墙模式", Value = false, Callback = function(v) Features.WallClimb.Enabled = v; Updaters.WallClimb() end })
-        contentContainer:Slider({ Title = "爬墙速度", Value = { Min = 1, Max = 200, Default = 50 }, Callback = function(v) Features.WallClimb.Value = v end })
-
-    elseif currentCategory == "战斗" then
-        contentContainer:Toggle({ Title = "无敌模式", Value = false, Callback = function(v) Features.GodMode.Enabled = v; Updaters.GodMode() end })
-        contentContainer:Toggle({ Title = "攻击无间隔", Value = false, Callback = function(v) Features.NoCooldown.Enabled = v; Updaters.NoCooldown() end })
-        contentContainer:Toggle({ Title = "无限子弹", Value = false, Callback = function(v) Features.InfiniteAmmo.Enabled = v; Updaters.InfiniteAmmo() end })
-        contentContainer:Toggle({ Title = "自动攻击", Value = false, Callback = function(v) Features.AutoAttack.Enabled = v; Updaters.AutoAttack() end })
-        contentContainer:Toggle({ Title = "杀戮光环", Value = false, Callback = function(v) Features.KillAura.Enabled = v; Updaters.KillAura() end })
-        contentContainer:Slider({ Title = "杀戮光环范围", Value = { Min = 1, Max = 100, Default = 20 }, Callback = function(v) Features.KillAura.Value = v end })
-        contentContainer:Toggle({ Title = "自动瞄准 (简单)", Value = false, Callback = function(v) Features.Aimbot.Enabled = v; Updaters.Aimbot() end })
-        contentContainer:Toggle({ Title = "快速射击", Value = false, Callback = function(v) Features.RapidFire.Enabled = v; Updaters.RapidFire() end })
-        contentContainer:Toggle({ Title = "自动开火", Value = false, Callback = function(v) Features.AutoFire.Enabled = v; Updaters.AutoFire() end })
-
-    elseif currentCategory == "视觉" then
-        contentContainer:Toggle({ Title = "夜视模式", Value = false, Callback = function(v) Features.NightVision.Enabled = v; Updaters.NightVision() end })
-        contentContainer:Toggle({ Title = "全亮模式", Value = false, Callback = function(v) Features.FullBright.Enabled = v; Updaters.FullBright() end })
-        contentContainer:Toggle({ Title = "玩家透视 (ESP)", Value = false, Callback = function(v) Features.ESP.Enabled = v; Updaters.ESP() end })
-        contentContainer:Toggle({ Title = "地图透视 (X光)", Value = false, Callback = function(v) Features.Xray.Enabled = v; Updaters.Xray() end })
-        contentContainer:Toggle({ Title = "清除迷雾", Value = false, Callback = function(v) Features.NoFog.Enabled = v; Updaters.NoFog() end })
-        contentContainer:Toggle({ Title = "颜色滤镜", Value = false, Callback = function(v) Features.ColorFilter.Enabled = v; Updaters.ColorFilter() end })
-        contentContainer:Dropdown({ Title = "滤镜颜色", Values = {"Red","Blue","Green","Pink","Yellow","Cyan"}, Value = "Pink", Callback = function(v) Features.ColorFilter.Value = v end })
-        contentContainer:Toggle({ Title = "自由视角", Value = false, Callback = function(v) Features.FreeCam.Enabled = v; Updaters.FreeCam() end })
-        contentContainer:Toggle({ Title = "热能透视", Value = false, Callback = function(v) Features.ThermalESP.Enabled = v; Updaters.ThermalESP() end })
-
-    elseif currentCategory == "工具" then
-        contentContainer:Toggle({ Title = "🎵 音乐播放器", Value = false, Callback = function(v)
-            Features.MusicPlayer.Enabled = v
-            Updaters.MusicPlayer()
-            if v then WindUI:Notify({Title = "🎵 音乐播放器", Content = "已开启，点击右侧金色悬浮窗", Duration = 3}) end
-        end })
-        contentContainer:Toggle({ Title = "连点器", Value = false, Callback = function(v) Features.AutoClicker.Enabled = v; Updaters.AutoClicker() end })
-        contentContainer:Slider({ Title = "连点间隔 (ms)", Value = { Min = 1, Max = 5000, Default = 10 }, Callback = function(v) Features.AutoClicker.Value = v end })
-        contentContainer:Toggle({ Title = "连点启动", Value = false, Callback = function(v) Features.ClickerStart.Enabled = v; Updaters.ClickerStart() end })
-        contentContainer:Toggle({ Title = "多球模式", Value = false, Callback = function(v) Features.ClickerMulti.Enabled = v; Updaters.ClickerMulti() end })
-        contentContainer:Toggle({ Title = "快速交互", Value = false, Callback = function(v) Features.FastInteract.Enabled = v; Updaters.FastInteract() end })
-        contentContainer:Toggle({ Title = "自动保存配置", Value = false, Callback = function(v) Features.AutoSave.Enabled = v; Updaters.AutoSave() end })
-        contentContainer:Toggle({ Title = "反AFK", Value = false, Callback = function(v) Features.AntiAfk.Enabled = v; Updaters.AntiAfk() end })
-
-    elseif currentCategory == "人物" then
-        contentContainer:Toggle({ Title = "启用 NPC 显示", Value = false, Callback = function(v) Features.NpcDisplay.Enabled = v; Updaters.NpcDisplay() end })
-        contentContainer:Toggle({ Title = "NPC:头部", Value = true, Callback = function(v) Features.NpcDisplay.ShowHead = v end })
-        contentContainer:Toggle({ Title = "NPC:身体", Value = true, Callback = function(v) Features.NpcDisplay.ShowTorso = v end })
-        contentContainer:Toggle({ Title = "NPC:四肢", Value = true, Callback = function(v) Features.NpcDisplay.ShowLimbs = v end })
-        contentContainer:Toggle({ Title = "NPC:骨骼", Value = true, Callback = function(v) Features.NpcDisplay.ShowBones = v end })
-        contentContainer:Toggle({ Title = "启用玩家显示", Value = false, Callback = function(v) Features.PlayerDisplay.Enabled = v; Updaters.PlayerDisplay() end })
-        contentContainer:Toggle({ Title = "玩家:头部", Value = true, Callback = function(v) Features.PlayerDisplay.ShowHead = v end })
-        contentContainer:Toggle({ Title = "玩家:身体", Value = true, Callback = function(v) Features.PlayerDisplay.ShowTorso = v end })
-        contentContainer:Toggle({ Title = "玩家:四肢", Value = true, Callback = function(v) Features.PlayerDisplay.ShowLimbs = v end })
-        contentContainer:Toggle({ Title = "玩家:骨骼", Value = true, Callback = function(v) Features.PlayerDisplay.ShowBones = v end })
-        contentContainer:Toggle({ Title = "玩家:名字", Value = true, Callback = function(v) Features.PlayerDisplay.ShowName = v end })
-        contentContainer:Toggle({ Title = "玩家:距离", Value = true, Callback = function(v) Features.PlayerDisplay.ShowDistance = v end })
-        contentContainer:Toggle({ Title = "玩家:血量", Value = true, Callback = function(v) Features.PlayerDisplay.ShowHealth = v end })
-        contentContainer:Toggle({ Title = "启用框选", Value = false, Callback = function(v) Features.BoxCreature.Enabled = v; Updaters.BoxCreature() end })
-        contentContainer:Toggle({ Title = "框选NPC", Value = true, Callback = function(v) Features.BoxCreature.BoxNpc = v end })
-        contentContainer:Toggle({ Title = "框选玩家", Value = true, Callback = function(v) Features.BoxCreature.BoxPlayer = v end })
-        contentContainer:Toggle({ Title = "显示碰撞箱", Value = false, Callback = function(v) Features.BoxCreature.ShowHitbox = v end })
-        contentContainer:Dropdown({ Title = "框选模式", Values = {"3D","2D"}, Value = "3D", Callback = function(v) Features.BoxCreature.BoxMode = v end })
-        contentContainer:Slider({ Title = "框选最大距离", Value = { Min = 0, Max = 5000, Default = 0 }, Callback = function(v) Features.BoxCreature.MaxDistance = v end })
-        contentContainer:Toggle({ Title = "启用连线", Value = false, Callback = function(v) Features.LineConnect.Enabled = v; Updaters.LineConnect() end })
-        contentContainer:Toggle({ Title = "连接玩家", Value = true, Callback = function(v) Features.LineConnect.ConnectPlayer = v end })
-        contentContainer:Toggle({ Title = "连接NPC", Value = false, Callback = function(v) Features.LineConnect.ConnectNpc = v end })
-        contentContainer:Dropdown({ Title = "线起点", Values = {"Top","Bottom","Cross"}, Value = "Top", Callback = function(v) Features.LineConnect.Origin = v end })
-        contentContainer:Toggle({ Title = "启用智能自瞄", Value = false, Callback = function(v) Features.AimbotV2.Enabled = v; Updaters.AimbotV2() end })
-        contentContainer:Toggle({ Title = "自瞄玩家", Value = true, Callback = function(v) Features.AimbotV2.AimPlayer = v end })
-        contentContainer:Toggle({ Title = "自瞄NPC", Value = false, Callback = function(v) Features.AimbotV2.AimNpc = v end })
-        contentContainer:Toggle({ Title = "检测墙体", Value = false, Callback = function(v) Features.AimbotV2.WallCheck = v end })
-        contentContainer:Toggle({ Title = "平滑瞄准", Value = true, Callback = function(v) Features.AimbotV2.Smooth = v end })
-        contentContainer:Dropdown({ Title = "瞄准部位", Values = {"Head","HumanoidRootPart","Torso"}, Value = "Head", Callback = function(v) Features.AimbotV2.AimPart = v end })
-        contentContainer:Slider({ Title = "圆圈大小", Value = { Min = 50, Max = 500, Default = 150 }, Callback = function(v) Features.AimbotV2.CircleSize = v end })
-        contentContainer:Slider({ Title = "瞄准速度", Value = { Min = 0.02, Max = 0.9, Default = 0.3 }, Callback = function(v) Features.AimbotV2.AimSpeed = v end })
-        contentContainer:Toggle({ Title = "启用高级透视", Value = false, Callback = function(v) Features.AdvancedESP.Enabled = v; Updaters.AdvancedESP() end })
-        contentContainer:Toggle({ Title = "显示方框", Value = true, Callback = function(v) Features.AdvancedESP.ShowBox = v end })
-        contentContainer:Toggle({ Title = "显示名字", Value = true, Callback = function(v) Features.AdvancedESP.ShowName = v end })
-        contentContainer:Toggle({ Title = "显示血量", Value = true, Callback = function(v) Features.AdvancedESP.ShowHealth = v end })
-        contentContainer:Toggle({ Title = "显示距离", Value = true, Callback = function(v) Features.AdvancedESP.ShowDistance = v end })
-        contentContainer:Toggle({ Title = "骨骼线", Value = false, Callback = function(v) Features.AdvancedESP.Skeleton = v end })
-        contentContainer:Toggle({ Title = "追踪线", Value = false, Callback = function(v) Features.AdvancedESP.Tracer = v end })
-        contentContainer:Toggle({ Title = "上色渲染", Value = true, Callback = function(v) Features.AdvancedESP.ShowChams = v end })
-        contentContainer:Dropdown({ Title = "方框样式", Values = {"Corner","Full"}, Value = "Corner", Callback = function(v) Features.AdvancedESP.BoxStyle = v end })
-        contentContainer:Dropdown({ Title = "血条样式", Values = {"Bar","Text","Both"}, Value = "Bar", Callback = function(v) Features.AdvancedESP.HealthStyle = v end })
-
-    elseif currentCategory == "系统" then
-        contentContainer:Toggle({ Title = "显示 FPS", Value = false, Callback = function(v) Features.ShowFps.Enabled = v; Updaters.ShowFps() end })
-        contentContainer:Toggle({ Title = "显示坐标", Value = false, Callback = function(v) Features.ShowCoords.Enabled = v; Updaters.ShowCoords() end })
-        contentContainer:Toggle({ Title = "重力修改", Value = false, Callback = function(v) Features.GravityMod.Enabled = v; Updaters.GravityMod() end })
-        contentContainer:Slider({ Title = "重力值", Value = { Min = 0, Max = 1000, Default = 50 }, Callback = function(v) Features.GravityMod.Value = v end })
-        contentContainer:Toggle({ Title = "时间修改", Value = false, Callback = function(v) Features.TimeOfDay.Enabled = v; Updaters.TimeOfDay() end })
-        contentContainer:Slider({ Title = "时间 (小时)", Value = { Min = 0, Max = 24, Default = 12 }, Callback = function(v) Features.TimeOfDay.Value = v end })
-        contentContainer:Toggle({ Title = "随处坐下 (按 X)", Value = false, Callback = function(v) Features.SitAnywhere.Enabled = v; Updaters.SitAnywhere() end })
-        contentContainer:Toggle({ Title = "危险警告", Value = false, Callback = function(v) Features.DangerWarning.Enabled = v; Updaters.DangerWarning() end })
-        contentContainer:Slider({ Title = "警告距离", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.DangerWarning.Value = v end })
-    end
+for i = 1, 6 do
+    Tabs[i] = Window:Tab({
+        Title = tabNames[i],
+        Icon = tabIcons[i],
+    })
 end
 
--- 首次构建
-rebuildContent()
+-- ============================================================
+-- 填充每个标签页
+-- ============================================================
+
+-- 1. 移动标签页
+Tabs[1]:Section({ Title = "基础移动" })
+Tabs[1]:Toggle({ Title = "加速移动", Value = false, Callback = function(v) Features.WalkSpeed.Enabled = v; Updaters.WalkSpeed() end })
+Tabs[1]:Slider({ Title = "移动速度", Value = { Min = 1, Max = 500, Default = 100 }, Callback = function(v) Features.WalkSpeed.Value = v end })
+Tabs[1]:Toggle({ Title = "传送行走", Value = false, Callback = function(v) Features.TpWalk.Enabled = v; Updaters.TpWalk() end })
+Tabs[1]:Slider({ Title = "传送距离", Value = { Min = 1, Max = 100, Default = 2 }, Callback = function(v) Features.TpWalk.Value = v end })
+Tabs[1]:Toggle({ Title = "飞行模式 (F键)", Value = false, Callback = function(v) Features.Fly1.Enabled = v; Updaters.Fly1() end })
+Tabs[1]:Slider({ Title = "飞行速度", Value = { Min = 1, Max = 500, Default = 45 }, Callback = function(v) Features.Fly1.Value = v end })
+Tabs[1]:Toggle({ Title = "飞行模式2 (WASD+EQ)", Value = false, Callback = function(v) Features.Fly2.Enabled = v; Updaters.Fly2() end })
+Tabs[1]:Slider({ Title = "飞行速度2", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.Fly2.Value = v end })
+Tabs[1]:Toggle({ Title = "自由移动", Value = false, Callback = function(v) Features.FreeMove.Enabled = v; Updaters.FreeMove() end })
+Tabs[1]:Slider({ Title = "自由移动速度", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.FreeMove.Value = v end })
+Tabs[1]:Toggle({ Title = "穿墙 (NoClip)", Value = false, Callback = function(v) Features.Noclip.Enabled = v; Updaters.Noclip() end })
+Tabs[1]:Toggle({ Title = "超级连跳", Value = false, Callback = function(v) Features.BunnyHop.Enabled = v; Updaters.BunnyHop() end })
+Tabs[1]:Slider({ Title = "连跳增量", Value = { Min = 1, Max = 100, Default = 5 }, Callback = function(v) Features.BunnyHop.Value = v end })
+Tabs[1]:Toggle({ Title = "跳高修改", Value = false, Callback = function(v) Features.JumpHeight.Enabled = v; Updaters.JumpHeight() end })
+Tabs[1]:Slider({ Title = "跳跃高度", Value = { Min = 1, Max = 500, Default = 100 }, Callback = function(v) Features.JumpHeight.Value = v end })
+Tabs[1]:Toggle({ Title = "自动奔跑", Value = false, Callback = function(v) Features.AutoRun.Enabled = v; Updaters.AutoRun() end })
+Tabs[1]:Toggle({ Title = "超级跳跃", Value = false, Callback = function(v) Features.SuperJump.Enabled = v; Updaters.SuperJump() end })
+Tabs[1]:Slider({ Title = "超级跳跃力度", Value = { Min = 1, Max = 500, Default = 200 }, Callback = function(v) Features.SuperJump.Value = v end })
+Tabs[1]:Toggle({ Title = "爬墙模式", Value = false, Callback = function(v) Features.WallClimb.Enabled = v; Updaters.WallClimb() end })
+Tabs[1]:Slider({ Title = "爬墙速度", Value = { Min = 1, Max = 200, Default = 50 }, Callback = function(v) Features.WallClimb.Value = v end })
+
+-- 2. 战斗标签页
+Tabs[2]:Section({ Title = "战斗增强" })
+Tabs[2]:Toggle({ Title = "无敌模式", Value = false, Callback = function(v) Features.GodMode.Enabled = v; Updaters.GodMode() end })
+Tabs[2]:Toggle({ Title = "攻击无间隔", Value = false, Callback = function(v) Features.NoCooldown.Enabled = v; Updaters.NoCooldown() end })
+Tabs[2]:Toggle({ Title = "无限子弹", Value = false, Callback = function(v) Features.InfiniteAmmo.Enabled = v; Updaters.InfiniteAmmo() end })
+Tabs[2]:Toggle({ Title = "自动攻击", Value = false, Callback = function(v) Features.AutoAttack.Enabled = v; Updaters.AutoAttack() end })
+Tabs[2]:Toggle({ Title = "杀戮光环", Value = false, Callback = function(v) Features.KillAura.Enabled = v; Updaters.KillAura() end })
+Tabs[2]:Slider({ Title = "杀戮光环范围", Value = { Min = 1, Max = 100, Default = 20 }, Callback = function(v) Features.KillAura.Value = v end })
+Tabs[2]:Toggle({ Title = "自动瞄准 (简单)", Value = false, Callback = function(v) Features.Aimbot.Enabled = v; Updaters.Aimbot() end })
+Tabs[2]:Toggle({ Title = "快速射击", Value = false, Callback = function(v) Features.RapidFire.Enabled = v; Updaters.RapidFire() end })
+Tabs[2]:Toggle({ Title = "自动开火", Value = false, Callback = function(v) Features.AutoFire.Enabled = v; Updaters.AutoFire() end })
+
+-- 3. 视觉标签页
+Tabs[3]:Section({ Title = "环境效果" })
+Tabs[3]:Toggle({ Title = "夜视模式", Value = false, Callback = function(v) Features.NightVision.Enabled = v; Updaters.NightVision() end })
+Tabs[3]:Toggle({ Title = "全亮模式", Value = false, Callback = function(v) Features.FullBright.Enabled = v; Updaters.FullBright() end })
+Tabs[3]:Toggle({ Title = "玩家透视 (ESP)", Value = false, Callback = function(v) Features.ESP.Enabled = v; Updaters.ESP() end })
+Tabs[3]:Toggle({ Title = "地图透视 (X光)", Value = false, Callback = function(v) Features.Xray.Enabled = v; Updaters.Xray() end })
+Tabs[3]:Toggle({ Title = "清除迷雾", Value = false, Callback = function(v) Features.NoFog.Enabled = v; Updaters.NoFog() end })
+Tabs[3]:Toggle({ Title = "颜色滤镜", Value = false, Callback = function(v) Features.ColorFilter.Enabled = v; Updaters.ColorFilter() end })
+Tabs[3]:Dropdown({ Title = "滤镜颜色", Values = {"Red","Blue","Green","Pink","Yellow","Cyan"}, Value = "Pink", Callback = function(v) Features.ColorFilter.Value = v end })
+Tabs[3]:Toggle({ Title = "自由视角", Value = false, Callback = function(v) Features.FreeCam.Enabled = v; Updaters.FreeCam() end })
+Tabs[3]:Toggle({ Title = "热能透视", Value = false, Callback = function(v) Features.ThermalESP.Enabled = v; Updaters.ThermalESP() end })
+
+-- 4. 工具标签页
+Tabs[4]:Section({ Title = "实用工具" })
+Tabs[4]:Toggle({ Title = "🎵 音乐播放器", Value = false, Callback = function(v)
+    Features.MusicPlayer.Enabled = v
+    Updaters.MusicPlayer()
+    if v then WindUI:Notify({Title = "🎵 音乐播放器", Content = "已开启，点击右侧金色悬浮窗", Duration = 3}) end
+end })
+Tabs[4]:Toggle({ Title = "连点器", Value = false, Callback = function(v) Features.AutoClicker.Enabled = v; Updaters.AutoClicker() end })
+Tabs[4]:Slider({ Title = "连点间隔 (ms)", Value = { Min = 1, Max = 5000, Default = 10 }, Callback = function(v) Features.AutoClicker.Value = v end })
+Tabs[4]:Toggle({ Title = "连点启动", Value = false, Callback = function(v) Features.ClickerStart.Enabled = v; Updaters.ClickerStart() end })
+Tabs[4]:Toggle({ Title = "多球模式", Value = false, Callback = function(v) Features.ClickerMulti.Enabled = v; Updaters.ClickerMulti() end })
+Tabs[4]:Toggle({ Title = "快速交互", Value = false, Callback = function(v) Features.FastInteract.Enabled = v; Updaters.FastInteract() end })
+Tabs[4]:Toggle({ Title = "自动保存配置", Value = false, Callback = function(v) Features.AutoSave.Enabled = v; Updaters.AutoSave() end })
+Tabs[4]:Toggle({ Title = "反AFK", Value = false, Callback = function(v) Features.AntiAfk.Enabled = v; Updaters.AntiAfk() end })
+
+-- 5. 人物标签页
+Tabs[5]:Section({ Title = "NPC 显示" })
+Tabs[5]:Toggle({ Title = "启用 NPC 显示", Value = false, Callback = function(v) Features.NpcDisplay.Enabled = v; Updaters.NpcDisplay() end })
+Tabs[5]:Toggle({ Title = "NPC:头部", Value = true, Callback = function(v) Features.NpcDisplay.ShowHead = v end })
+Tabs[5]:Toggle({ Title = "NPC:身体", Value = true, Callback = function(v) Features.NpcDisplay.ShowTorso = v end })
+Tabs[5]:Toggle({ Title = "NPC:四肢", Value = true, Callback = function(v) Features.NpcDisplay.ShowLimbs = v end })
+Tabs[5]:Toggle({ Title = "NPC:骨骼", Value = true, Callback = function(v) Features.NpcDisplay.ShowBones = v end })
+Tabs[5]:Section({ Title = "玩家显示" })
+Tabs[5]:Toggle({ Title = "启用玩家显示", Value = false, Callback = function(v) Features.PlayerDisplay.Enabled = v; Updaters.PlayerDisplay() end })
+Tabs[5]:Toggle({ Title = "玩家:头部", Value = true, Callback = function(v) Features.PlayerDisplay.ShowHead = v end })
+Tabs[5]:Toggle({ Title = "玩家:身体", Value = true, Callback = function(v) Features.PlayerDisplay.ShowTorso = v end })
+Tabs[5]:Toggle({ Title = "玩家:四肢", Value = true, Callback = function(v) Features.PlayerDisplay.ShowLimbs = v end })
+Tabs[5]:Toggle({ Title = "玩家:骨骼", Value = true, Callback = function(v) Features.PlayerDisplay.ShowBones = v end })
+Tabs[5]:Toggle({ Title = "玩家:名字", Value = true, Callback = function(v) Features.PlayerDisplay.ShowName = v end })
+Tabs[5]:Toggle({ Title = "玩家:距离", Value = true, Callback = function(v) Features.PlayerDisplay.ShowDistance = v end })
+Tabs[5]:Toggle({ Title = "玩家:血量", Value = true, Callback = function(v) Features.PlayerDisplay.ShowHealth = v end })
+Tabs[5]:Section({ Title = "框选生物" })
+Tabs[5]:Toggle({ Title = "启用框选", Value = false, Callback = function(v) Features.BoxCreature.Enabled = v; Updaters.BoxCreature() end })
+Tabs[5]:Toggle({ Title = "框选NPC", Value = true, Callback = function(v) Features.BoxCreature.BoxNpc = v end })
+Tabs[5]:Toggle({ Title = "框选玩家", Value = true, Callback = function(v) Features.BoxCreature.BoxPlayer = v end })
+Tabs[5]:Toggle({ Title = "显示碰撞箱", Value = false, Callback = function(v) Features.BoxCreature.ShowHitbox = v end })
+Tabs[5]:Dropdown({ Title = "框选模式", Values = {"3D","2D"}, Value = "3D", Callback = function(v) Features.BoxCreature.BoxMode = v end })
+Tabs[5]:Slider({ Title = "框选最大距离", Value = { Min = 0, Max = 5000, Default = 0 }, Callback = function(v) Features.BoxCreature.MaxDistance = v end })
+Tabs[5]:Section({ Title = "连线追踪" })
+Tabs[5]:Toggle({ Title = "启用连线", Value = false, Callback = function(v) Features.LineConnect.Enabled = v; Updaters.LineConnect() end })
+Tabs[5]:Toggle({ Title = "连接玩家", Value = true, Callback = function(v) Features.LineConnect.ConnectPlayer = v end })
+Tabs[5]:Toggle({ Title = "连接NPC", Value = false, Callback = function(v) Features.LineConnect.ConnectNpc = v end })
+Tabs[5]:Dropdown({ Title = "线起点", Values = {"Top","Bottom","Cross"}, Value = "Top", Callback = function(v) Features.LineConnect.Origin = v end })
+Tabs[5]:Section({ Title = "智能自瞄 V2" })
+Tabs[5]:Toggle({ Title = "启用智能自瞄", Value = false, Callback = function(v) Features.AimbotV2.Enabled = v; Updaters.AimbotV2() end })
+Tabs[5]:Toggle({ Title = "自瞄玩家", Value = true, Callback = function(v) Features.AimbotV2.AimPlayer = v end })
+Tabs[5]:Toggle({ Title = "自瞄NPC", Value = false, Callback = function(v) Features.AimbotV2.AimNpc = v end })
+Tabs[5]:Toggle({ Title = "检测墙体", Value = false, Callback = function(v) Features.AimbotV2.WallCheck = v end })
+Tabs[5]:Toggle({ Title = "平滑瞄准", Value = true, Callback = function(v) Features.AimbotV2.Smooth = v end })
+Tabs[5]:Dropdown({ Title = "瞄准部位", Values = {"Head","HumanoidRootPart","Torso"}, Value = "Head", Callback = function(v) Features.AimbotV2.AimPart = v end })
+Tabs[5]:Slider({ Title = "圆圈大小", Value = { Min = 50, Max = 500, Default = 150 }, Callback = function(v) Features.AimbotV2.CircleSize = v end })
+Tabs[5]:Slider({ Title = "瞄准速度", Value = { Min = 0.02, Max = 0.9, Default = 0.3 }, Callback = function(v) Features.AimbotV2.AimSpeed = v end })
+Tabs[5]:Section({ Title = "高级透视" })
+Tabs[5]:Toggle({ Title = "启用高级透视", Value = false, Callback = function(v) Features.AdvancedESP.Enabled = v; Updaters.AdvancedESP() end })
+Tabs[5]:Toggle({ Title = "显示方框", Value = true, Callback = function(v) Features.AdvancedESP.ShowBox = v end })
+Tabs[5]:Toggle({ Title = "显示名字", Value = true, Callback = function(v) Features.AdvancedESP.ShowName = v end })
+Tabs[5]:Toggle({ Title = "显示血量", Value = true, Callback = function(v) Features.AdvancedESP.ShowHealth = v end })
+Tabs[5]:Toggle({ Title = "显示距离", Value = true, Callback = function(v) Features.AdvancedESP.ShowDistance = v end })
+Tabs[5]:Toggle({ Title = "骨骼线", Value = false, Callback = function(v) Features.AdvancedESP.Skeleton = v end })
+Tabs[5]:Toggle({ Title = "追踪线", Value = false, Callback = function(v) Features.AdvancedESP.Tracer = v end })
+Tabs[5]:Toggle({ Title = "上色渲染", Value = true, Callback = function(v) Features.AdvancedESP.ShowChams = v end })
+Tabs[5]:Dropdown({ Title = "方框样式", Values = {"Corner","Full"}, Value = "Corner", Callback = function(v) Features.AdvancedESP.BoxStyle = v end })
+Tabs[5]:Dropdown({ Title = "血条样式", Values = {"Bar","Text","Both"}, Value = "Bar", Callback = function(v) Features.AdvancedESP.HealthStyle = v end })
+
+-- 6. 系统标签页
+Tabs[6]:Section({ Title = "系统设置" })
+Tabs[6]:Toggle({ Title = "显示 FPS", Value = false, Callback = function(v) Features.ShowFps.Enabled = v; Updaters.ShowFps() end })
+Tabs[6]:Toggle({ Title = "显示坐标", Value = false, Callback = function(v) Features.ShowCoords.Enabled = v; Updaters.ShowCoords() end })
+Tabs[6]:Toggle({ Title = "重力修改", Value = false, Callback = function(v) Features.GravityMod.Enabled = v; Updaters.GravityMod() end })
+Tabs[6]:Slider({ Title = "重力值", Value = { Min = 0, Max = 1000, Default = 50 }, Callback = function(v) Features.GravityMod.Value = v end })
+Tabs[6]:Toggle({ Title = "时间修改", Value = false, Callback = function(v) Features.TimeOfDay.Enabled = v; Updaters.TimeOfDay() end })
+Tabs[6]:Slider({ Title = "时间 (小时)", Value = { Min = 0, Max = 24, Default = 12 }, Callback = function(v) Features.TimeOfDay.Value = v end })
+Tabs[6]:Toggle({ Title = "随处坐下 (按 X)", Value = false, Callback = function(v) Features.SitAnywhere.Enabled = v; Updaters.SitAnywhere() end })
+Tabs[6]:Toggle({ Title = "危险警告", Value = false, Callback = function(v) Features.DangerWarning.Enabled = v; Updaters.DangerWarning() end })
+Tabs[6]:Slider({ Title = "警告距离", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.DangerWarning.Value = v end })
+
+-- ============================================================
+-- 强制选中第一个标签页
+-- ============================================================
+Window:SelectTab(1)
 
 -- ============================================================
 -- 快捷键
@@ -2510,13 +2499,13 @@ end
 
 Window:Open()
 WindUI:Notify({
-    Title = "✨ 星光辅助 V2.1",
-    Content = string.format("加载 %.2fs | 下拉菜单切换分类 | F键飞行", elapsed),
+    Title = "✨ 星光辅助 V2.2",
+    Content = string.format("半透明 · 加载 %.2fs | F键飞行", elapsed),
     Duration = 5,
     Icon = "star"
 })
 
-print(string.format("[星光辅助] 加载完成 | 耗时 %.2fs", elapsed))
+print(string.format("[星光辅助] 加载完成 | 耗时 %.2fs | 半透明主题", elapsed))
 
 -- ============================================================
 -- 清理
