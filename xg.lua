@@ -1,9 +1,23 @@
 -- ============================================================
 -- 星光辅助 V2.0 · 融合 Ninja Hub 全部功能
 -- ============================================================
+
 -- 加载 WindUI
--- ============================================================
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+-- ============================================================
+-- 1. 先注册金黄色主题（必须在创建窗口之前）
+-- ============================================================
+WindUI:AddTheme({
+    Name = "StarGold",
+    Accent = "#FFD700",
+    Outline = "#B8860B",
+    Text = "#FFFFFF",
+    Placeholder = "#A8A098",
+})
+
+-- 应用主题
+WindUI:SetTheme("StarGold")
 
 -- ============================================================
 -- 服务与全局变量
@@ -26,12 +40,10 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 local LoadStartTime = tick()
 
--- ============================================================
--- 金黄色主题配色
--- ============================================================
+-- 金黄色配色（用于 UI 装饰）
 local C = {
     Gold = Color3.fromRGB(255, 215, 0),
-    GoldDark = Color3.fromRGB(180, 150, 20),
+    GoldDark = Color3.fromRGB(184, 134, 11),
     GoldLight = Color3.fromRGB(255, 235, 150),
     GoldDim = Color3.fromRGB(120, 100, 30),
     Bg = Color3.fromRGB(12, 10, 18),
@@ -64,10 +76,9 @@ player.CharacterAdded:Connect(function(char)
 end)
 
 -- ============================================================
--- 功能状态表（移植自 Ninja Hub）
+-- 功能状态表
 -- ============================================================
 local Features = {
-    -- 移动
     WalkSpeed = {Enabled = false, Value = 100, Default = 16},
     TpWalk = {Enabled = false, Value = 2},
     Fly1 = {Enabled = false, Value = 45},
@@ -79,8 +90,6 @@ local Features = {
     AutoRun = {Enabled = false},
     SuperJump = {Enabled = false, Value = 200},
     WallClimb = {Enabled = false, Value = 50},
-
-    -- 战斗
     GodMode = {Enabled = false},
     NoCooldown = {Enabled = false},
     InfiniteAmmo = {Enabled = false},
@@ -89,8 +98,6 @@ local Features = {
     Aimbot = {Enabled = false},
     RapidFire = {Enabled = false},
     AutoFire = {Enabled = false},
-
-    -- 视觉
     NightVision = {Enabled = false},
     FullBright = {Enabled = false},
     ESP = {Enabled = false},
@@ -99,8 +106,6 @@ local Features = {
     ColorFilter = {Enabled = false, Value = "Pink"},
     FreeCam = {Enabled = false},
     ThermalESP = {Enabled = false},
-
-    -- 工具
     MusicPlayer = {Enabled = false},
     AutoClicker = {Enabled = false, Value = 10},
     ClickerStart = {Enabled = false},
@@ -108,16 +113,12 @@ local Features = {
     FastInteract = {Enabled = false},
     AutoSave = {Enabled = false},
     AntiAfk = {Enabled = false},
-
-    -- 人物渲染
     NpcDisplay = {Enabled = false, ShowHead = true, ShowTorso = true, ShowLimbs = true, ShowBones = true},
     PlayerDisplay = {Enabled = false, ShowHead = true, ShowTorso = true, ShowLimbs = true, ShowBones = true, ShowName = true, ShowDistance = true, ShowHealth = true},
     BoxCreature = {Enabled = false, BoxNpc = true, BoxPlayer = true, BoxOther = true, BoxAliveOnly = false, BoxMode = "3D", ShowHitbox = false, MaxDistance = 0},
     LineConnect = {Enabled = false, ConnectNpc = false, ConnectPlayer = true, ConnectOther = false, LineWallCheck = false, Origin = "Top", MaxDistance = 0},
     AimbotV2 = {Enabled = false, AimPlayer = true, AimNpc = false, AimOther = false, AimPart = "Head", CircleSize = 150, AimSpeed = 0.3, WallCheck = false, TeamCheck = false, AliveCheck = true, Smooth = true, Predict = false, CustomTarget = nil, MaxDistance = 0},
     AdvancedESP = {Enabled = false, ShowBox = true, BoxStyle = "Corner", BoxThickness = 1, ShowName = true, ShowHealth = true, ShowDistance = true, HealthStyle = "Bar", ShowChams = true, TeamCheck = false, ShowTeam = false, WallCheck = false, Tracer = false, TracerOrigin = "Bottom", Skeleton = false, MaxDistance = 300},
-
-    -- 系统
     DynamicIsland = {Enabled = true},
     ShowFps = {Enabled = false},
     ShowCoords = {Enabled = false},
@@ -166,7 +167,6 @@ local function enableMovementStates(hum)
     end
 end
 
--- 目标缓存
 local TargetCache = {Players = {}, Npcs = {}, Others = {}, All = {}}
 local LastNpcScan = 0
 local function updateTargetCache()
@@ -253,24 +253,18 @@ local function tryFireTool()
     tool:SetAttribute("SG_LastFire", now)
 end
 
-local function getGoldColor(offset, speed)
-    speed = speed or 0.3
-    local t = tick() * speed + (offset or 0)
-    -- 金色系：在黄色到橙色之间变化
-    local hue = 0.08 + 0.05 * math.sin(t * 0.5)
-    return Color3.fromHSV(hue, 0.8 + 0.2 * math.sin(t * 0.3), 0.9 + 0.1 * math.sin(t * 0.4))
+local function getGoldColor(offset)
+    local t = tick() * 0.3 + (offset or 0)
+    local hue = 0.08 + 0.04 * math.sin(t * 0.5)
+    return Color3.fromHSV(hue, 0.8 + 0.15 * math.sin(t * 0.3), 0.9 + 0.08 * math.sin(t * 0.4))
 end
 
--- ============================================================
--- 重生后恢复所有功能
--- ============================================================
 function reapplyAllFeatures()
     task.wait(0.5)
     local char = player.Character
     if not char then return end
     local hum = char:FindFirstChild("Humanoid")
     if not hum then return end
-
     for key, state in pairs(Features) do
         if type(state) == "table" and state.Enabled and Updaters[key] then
             pcall(Updaters[key])
@@ -527,7 +521,7 @@ local function clearRenderCache()
 end
 
 -- ============================================================
--- 音乐播放器（移植自 Ninja Hub）
+-- 音乐播放器
 -- ============================================================
 local MusicDir = "/storage/emulated/0/Delta/StarMusic"
 local MusicDirRel = "StarMusic"
@@ -841,7 +835,6 @@ local function buildMusicPanel()
     stroke.Transparency = 0.6
     stroke.Parent = panel
 
-    -- 标题栏
     local titleBar = Instance.new("TextButton")
     titleBar.Size = UDim2.new(1, 0, 0, 40)
     titleBar.BackgroundTransparency = 1
@@ -919,7 +912,6 @@ local function buildMusicPanel()
         end
     end)
 
-    -- 展开内容
     local content = Instance.new("Frame")
     content.Size = UDim2.new(1, -12, 0, 330)
     content.Position = UDim2.new(0, 6, 0, 44)
@@ -964,7 +956,7 @@ local function buildMusicPanel()
 end
 
 -- ============================================================
--- 构建 WindUI 窗口
+-- 构建 WindUI 窗口（必须用正确的方式）
 -- ============================================================
 local Window = WindUI:CreateWindow({
     Title = "星光辅助 · 融合版",
@@ -973,21 +965,14 @@ local Window = WindUI:CreateWindow({
     Folder = "StarAux",
     Size = UDim2.fromOffset(780, 620),
     Transparent = false,
-    Theme = "Dark",
+    Theme = "StarGold",  -- 使用已注册的主题名
     SideBarWidth = 200,
     HasOutline = true,
 })
 
--- 设置金黄色主题
-Window:SetTheme({
-    Name = "StarGold",
-    Accent = C.Gold:ToHex(),
-    Outline = C.GoldDark:ToHex(),
-    Text = C.Text:ToHex(),
-    Placeholder = C.TextSub:ToHex(),
-})
-
--- 标签页
+-- ============================================================
+-- 标签页（全部正常创建）
+-- ============================================================
 local Tabs = {
     Movement = Window:Tab({ Title = "移动", Icon = "move" }),
     Combat = Window:Tab({ Title = "战斗", Icon = "sword" }),
@@ -998,10 +983,9 @@ local Tabs = {
 }
 
 -- ============================================================
--- 功能实现 (Updaters)
+-- 功能实现 (Updaters) - 精简版，保留核心逻辑
 -- ============================================================
 
--- 移动
 Updaters.WalkSpeed = function()
     if Features.WalkSpeed.Enabled then
         if Conns.WalkSpeed then return end
@@ -1080,7 +1064,6 @@ Updaters.Fly1 = function()
         Features.FreeMove.Enabled = false; Updaters.FreeMove()
         Features.TpWalk.Enabled = false; Updaters.TpWalk()
         if humanoid then disableMovementStates(humanoid) end
-
         Conns.Fly1 = RunService.Heartbeat:Connect(function(dt)
             if not hrp then return end
             local speed = math.clamp(Features.Fly1.Value or 45, 1, 500)
@@ -1107,7 +1090,6 @@ Updaters.Fly2 = function()
         Features.FreeMove.Enabled = false; Updaters.FreeMove()
         Features.TpWalk.Enabled = false; Updaters.TpWalk()
         if humanoid then disableMovementStates(humanoid) end
-
         Conns.Fly2 = RunService.Heartbeat:Connect(function(dt)
             if not hrp or not Features.Fly2.Flying then return end
             local speed = math.clamp(Features.Fly2.Value or 50, 1, 500)
@@ -1137,7 +1119,6 @@ Updaters.FreeMove = function()
         Features.Fly1.Enabled = false; Updaters.Fly1()
         Features.Fly2.Enabled = false; Updaters.Fly2()
         Features.TpWalk.Enabled = false; Updaters.TpWalk()
-
         Conns.FreeMove = RunService.RenderStepped:Connect(function()
             if not hrp or not humanoid then return end
             if not FreeMoveBG or not FreeMoveBG.Parent then
@@ -1730,21 +1711,6 @@ Updaters.MusicPlayer = function()
     end
 end
 
-Updaters.AutoClicker = function()
-    if Features.AutoClicker.Enabled then
-        if Conns.ClickerColor then return end
-        Conns.ClickerColor = RunService.Heartbeat:Connect(function()
-            for i, ball in ipairs(Gui.ClickerBalls or {}) do
-                if ball and ball.Visible then
-                    ball.BackgroundColor3 = getGoldColor(i * 5)
-                end
-            end
-        end)
-    else
-        unbind("ClickerColor")
-    end
-end
-
 local ClickerBalls = {}
 local function createClickerBall()
     local ball = Instance.new("Frame")
@@ -1757,7 +1723,6 @@ local function createClickerBall()
     ball.Parent = CoreGui
     local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(1, 0); c.Parent = ball
     local stroke = Instance.new("UIStroke"); stroke.Color = C.Gold; stroke.Thickness = 2; stroke.Parent = ball
-
     local crossH = Instance.new("Frame")
     crossH.Size = UDim2.new(0, 20, 0, 2); crossH.Position = UDim2.new(0.5, -10, 0.5, -1)
     crossH.BackgroundColor3 = Color3.fromRGB(255,255,255); crossH.BorderSizePixel = 0
@@ -1770,6 +1735,21 @@ local function createClickerBall()
     return ball
 end
 Gui = {ClickerBalls = ClickerBalls}
+
+Updaters.AutoClicker = function()
+    if Features.AutoClicker.Enabled then
+        if Conns.ClickerColor then return end
+        Conns.ClickerColor = RunService.Heartbeat:Connect(function()
+            for i, ball in ipairs(ClickerBalls) do
+                if ball and ball.Visible then
+                    ball.BackgroundColor3 = getGoldColor(i * 5)
+                end
+            end
+        end)
+    else
+        unbind("ClickerColor")
+    end
+end
 
 Updaters.ClickerStart = function()
     if Features.ClickerStart.Enabled then
@@ -2051,10 +2031,9 @@ Updaters.LineConnect = function()
             local origin = Camera.CFrame:PointToWorldSpace(Vector3.new(0, offsetY, -6))
             local function drawLineTo(char, key)
                 if not char then return end
-                local endPos
                 local head = char:FindFirstChild("Head")
                 local hrp2 = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
-                endPos = head and head.Position or (hrp2 and hrp2.Position or nil)
+                local endPos = head and head.Position or (hrp2 and hrp2.Position or nil)
                 if not endPos or not inRenderRange(endPos) then return end
                 if maxD ~= 0 and hrp and (hrp.Position - endPos).Magnitude > maxD then return end
                 if Features.LineConnect.LineWallCheck then
@@ -2088,7 +2067,6 @@ Updaters.AimbotV2 = function()
         AimScanTick = 0
         Conns.AimbotV2 = RunService.RenderStepped:Connect(function()
             local csize = Features.AimbotV2.CircleSize
-            -- 用 WindUI 的 Circle 没法动态，这里用 Stroke 实现
             AimScanTick = AimScanTick + 1
             if AimScanTick % 3 == 0 then
                 local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
@@ -2446,7 +2424,7 @@ Updaters.DangerWarning = function()
 end
 
 -- ============================================================
--- 构建 UI 标签页
+-- 构建 UI 标签页内容
 -- ============================================================
 
 -- 移动标签页
@@ -2621,6 +2599,13 @@ Tabs.System:Toggle({ Title = "随处坐下 (按 X)", Value = false, Callback = f
 Tabs.System:Toggle({ Title = "危险警告", Value = false, Callback = function(v) Features.DangerWarning.Enabled = v; Updaters.DangerWarning() end })
 Tabs.System:Slider({ Title = "警告距离", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.DangerWarning.Value = v end })
 
+-- 灵动岛开关
+Updaters.DynamicIsland = function()
+    if Features.DynamicIsland.Enabled then
+        -- 启用灵动岛模式（WindUI 的打开按钮已经实现类似效果）
+    end
+end
+
 -- ============================================================
 -- 快捷键绑定
 -- ============================================================
@@ -2634,29 +2619,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
         end
     end
 end)
-
--- ============================================================
--- 动态装饰 - 金黄色调
--- ============================================================
-local function goldAnimate()
-    while true do
-        task.wait(0.08)
-        local t = tick() * 0.15
-        local c = Color3.fromHSV(0.08 + 0.02 * math.sin(t), 0.85, 0.95)
-
-        -- 更新窗口边框
-        local st = Window:GetUIStroke()
-        if st then st.Color = c end
-
-        -- 更新所有卡片渐变
-        for _, grad in ipairs(Gui.CardGrads or {}) do
-            if grad and grad.Parent then
-                grad.Color = ColorSequence.new(c, Color3.fromHSV(0.08, 0.7, 0.8))
-            end
-        end
-    end
-end
-task.spawn(goldAnimate)
 
 -- ============================================================
 -- 加载完成
