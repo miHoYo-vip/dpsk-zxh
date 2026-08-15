@@ -87,6 +87,21 @@ Features.OriginalGameSpeed = RunService.GlobalTimeScale
 Features.OriginalFOV = Camera.FieldOfView
 
 -- ============================================================
+-- 声明缺失的全局变量（修复引用错误）
+-- ============================================================
+local nightVisionConnection = nil
+local fullbrightConnection = nil
+local jumpConnection = nil
+local autoReconnectConn = nil
+local antiAFKThread = nil
+local teleportLoopThread = nil
+local espUpdateConn = nil
+local espPlayerAddedConn = nil
+local npcScanThread = nil
+local translationThread = nil
+local teleportLoopThread = nil
+
+-- ============================================================
 -- 照明状态管理（统一管理，避免互相覆盖）
 -- ============================================================
 local originalLighting = nil
@@ -159,8 +174,31 @@ local function resetLighting()
     end
 end
 
+-- ============================================================
+-- 补充缺失的 toggleFOV / toggleFreeCamera
+-- ============================================================
+function toggleFOV(enable)
+    Features.CustomFOV = enable
+    if enable then
+        Camera.FieldOfView = Features.FOVValue
+    else
+        Camera.FieldOfView = Features.OriginalFOV
+    end
+end
+
+function toggleFreeCamera(enable)
+    Features.FreeCamera = enable
+    if enable then
+        LocalPlayer.CameraMaxZoomDistance = 200
+    else
+        LocalPlayer.CameraMaxZoomDistance = Features.OriginalCameraZoom
+    end
+end
+
+-- ============================================================
 -- 照明功能开关（统一调用 applyLightingFeatures）
-local function toggleNightVision(enable)
+-- ============================================================
+function toggleNightVision(enable)
     Features.NightVision = enable
     if enable then
         if not nightVisionConnection then
@@ -175,7 +213,7 @@ local function toggleNightVision(enable)
     applyLightingFeatures()
 end
 
-local function toggleFullbright(enable)
+function toggleFullbright(enable)
     Features.Fullbright = enable
     if enable then
         if not fullbrightConnection then
@@ -190,12 +228,12 @@ local function toggleFullbright(enable)
     applyLightingFeatures()
 end
 
-local function toggleNoFog(enable)
+function toggleNoFog(enable)
     Features.NoFog = enable
     applyLightingFeatures()
 end
 
-local function toggleNoShadows(enable)
+function toggleNoShadows(enable)
     Features.NoShadows = enable
     applyLightingFeatures()
 end
@@ -207,7 +245,7 @@ local originalTextState = setmetatable({}, { __mode = "k" })
 local originalEffectState = setmetatable({}, { __mode = "k" })
 
 -- 屏幕特效开关
-local function toggleNoScreenEffects(enable)
+function toggleNoScreenEffects(enable)
     Features.NoScreenEffects = enable
     local effectTypes = {"BloomEffect", "ColorCorrectionEffect", "MotionBlurEffect", "DepthOfFieldEffect", "BlurEffect"}
     if enable then
@@ -246,7 +284,6 @@ local function reapplyAllFeatures()
     -- 飞行：强制重建
     if Features.Flying then
         task.spawn(function()
-            -- 先关闭旧状态，再开启
             toggleFly(false)
             task.wait(0.1)
             toggleFly(true)
@@ -285,7 +322,7 @@ end
 LocalPlayer.CharacterAdded:Connect(reapplyAllFeatures)
 
 -- ============================================================
--- 1. 移动增强（保持原样，仅修复非关键问题）
+-- 1. 移动增强
 -- ============================================================
 function toggleSpeed(enable)
     local char = LocalPlayer.Character
@@ -374,7 +411,7 @@ function toggleCustomGravity(enable)
 end
 
 -- ============================================================
--- 2. 飞行（修复重生重建问题，使用更健壮的实现）
+-- 2. 飞行
 -- ============================================================
 local flyBodyVelocity, flyBodyGyro, flyConnection = nil, nil, nil
 
@@ -426,14 +463,11 @@ local function onFlyHeartbeat()
 end
 
 function toggleFly(enable)
-    -- 如果已处于目标状态，则不做任何事（但重生后由于对象被销毁，需强制重建）
     if enable == Features.Flying and enable then
-        -- 检查物理对象是否存在，若不存在则重建
         local char = LocalPlayer.Character
         if char and char:FindFirstChild("HumanoidRootPart") then
             local rootPart = char.HumanoidRootPart
             if not flyBodyVelocity or not flyBodyVelocity.Parent then
-                -- 重建
                 flyBodyVelocity = Instance.new("BodyVelocity")
                 flyBodyVelocity.MaxForce = Vector3.new(9e6, 9e6, 9e6)
                 flyBodyVelocity.Velocity = Vector3.zero
@@ -562,10 +596,9 @@ function toggleNoFallDamage(enable)
 end
 
 -- ============================================================
--- 5. ESP 系统（含 Tracer，队伍颜色自动更新，优化扫描）
+-- 5. ESP 系统
 -- ============================================================
 local espObjects = {}
-local espUpdateConn, espPlayerAddedConn, npcScanThread = nil, nil, nil
 
 function clearESPFor(key)
     local data = espObjects[key]
@@ -749,14 +782,12 @@ function toggleESP(enable)
     end
 end
 
--- NPC ESP 优化：使用更细致的扫描，仅限模型
 function scanNPCs()
     if not Features.ESPNPC then return end
     local playersChars = {}
     for _, p in ipairs(Players:GetPlayers()) do
         if p.Character then playersChars[p.Character] = true end
     end
-    -- 限制扫描范围，只查 Workspace 下的 Model，且带 Humanoid 和 HumanoidRootPart
     for _, model in ipairs(Workspace:GetChildren()) do
         if model:IsA("Model") and model:FindFirstChild("Humanoid") and model:FindFirstChild("HumanoidRootPart") and not playersChars[model] then
             if not espObjects[model] then
@@ -776,7 +807,7 @@ function toggleESPNPC(enable)
         if npcScanThread then task.cancel(npcScanThread) end
         npcScanThread = task.spawn(function()
             while Features.ESPNPC do
-                task.wait(5)  -- 降低扫描频率
+                task.wait(5)
                 scanNPCs()
             end
         end)
@@ -793,7 +824,7 @@ function toggleESPNPC(enable)
 end
 
 -- ============================================================
--- 6. 自瞄（按钮拖拽使用统一逻辑）
+-- 6. 自瞄（修复按钮事件）
 -- ============================================================
 local aimConnection, aimButton = nil, nil
 
@@ -904,7 +935,7 @@ function createAimButton()
     button.Text = ""
     button.Parent = frame
 
-    -- 使用 UserInputService 实现拖动（更可靠）
+    -- 使用 InputBegan / InputEnded 替代 MouseButton1Down/Up（修复事件不存在问题）
     local isDragging = false
     local dragStartPos = nil
     local startMousePos = nil
@@ -937,14 +968,23 @@ function createAimButton()
         isDragging = false
     end
 
-    -- 鼠标事件
-    button.MouseButton1Down:Connect(function(x, y)
-        startDrag(Vector2.new(x, y))
+    -- 鼠标事件（使用 InputBegan/Ended）
+    button.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            startDrag(input.Position)
+        end
     end)
+    button.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            endDrag()
+        end
+    end)
+    -- 鼠标移动（只在按钮上有效，拖动时移出会中断，但保持可用）
     button.MouseMoved:Connect(function(x, y)
-        updateDrag(Vector2.new(x, y))
+        if isDragging then
+            updateDrag(Vector2.new(x, y))
+        end
     end)
-    button.MouseButton1Up:Connect(endDrag)
 
     -- 触摸事件
     button.TouchBegan:Connect(function(touch)
@@ -959,7 +999,7 @@ function createAimButton()
 end
 
 -- ============================================================
--- 7. FPS/Ping 悬浮窗（使用累加器，正确清理输入连接）
+-- 7. FPS/Ping 悬浮窗
 -- ============================================================
 local fpsGui = nil
 local fpsPingConnection = nil
@@ -1053,12 +1093,10 @@ function toggleFPSPing(enable)
         end
     end
 
-    -- 保存连接以便清理
     table.insert(fpsInputConnections, UserInputService.InputBegan:Connect(onInputBegan))
     table.insert(fpsInputConnections, UserInputService.InputChanged:Connect(onInputChanged))
     table.insert(fpsInputConnections, UserInputService.InputEnded:Connect(onInputEnded))
 
-    -- FPS/Ping 更新（使用累加器）
     local accTime = 0
     local frameCount = 0
 
@@ -1127,7 +1165,7 @@ function toggleSpinBot(enable)
 end
 
 -- ============================================================
--- 9. 翻译系统（加入 generation 防止旧请求覆盖，限制并发）
+-- 9. 翻译系统
 -- ============================================================
 local translationGeneration = 0
 local translationInFlight = {}
@@ -1153,10 +1191,7 @@ local function translateTextAsync(text, callback, gen)
         return
     end
 
-    -- 限制并发
     if translationInFlight[cacheKey] then
-        -- 添加到等待队列？
-        -- 简单起见，直接返回失败
         callback(nil)
         return
     end
@@ -1175,7 +1210,6 @@ local function translateTextAsync(text, callback, gen)
         translationInFlight[cacheKey] = nil
         if success and result then
             translationCache[cacheKey] = result
-            -- 仅当 generation 未变化才回调
             if gen == translationGeneration then
                 callback(result)
             end
@@ -1212,7 +1246,6 @@ local function processTextObject(obj, gen)
     else
         translateTextAsync(original, function(translated)
             if translated and translated ~= original and gen == translationGeneration then
-                -- 再次检查对象是否仍指向同一个文本
                 if obj and obj.Parent and obj.Text == original then
                     pcall(function() obj.Text = translated end)
                 end
@@ -1235,7 +1268,6 @@ local function scanAllUIs(gen)
     end
 end
 
-local translationThread = nil
 function toggleTranslation(enable)
     Features.Translation = enable
     if not enable then
@@ -1245,7 +1277,6 @@ function toggleTranslation(enable)
         return
     end
 
-    -- 增加 generation，使旧请求失效
     translationGeneration = translationGeneration + 1
     local currentGen = translationGeneration
 
@@ -1259,7 +1290,7 @@ function toggleTranslation(enable)
 end
 
 -- ============================================================
--- 10. 自动重连 & 反AFK（保留，但加注释）
+-- 10. 自动重连 & 反AFK
 -- ============================================================
 function toggleAutoReconnect(enable)
     Features.AutoReconnect = enable
@@ -1350,14 +1381,14 @@ function showServerRegion()
 end
 
 -- ============================================================
--- 12. 瞬移系统（坐标保存改为 CFrame，添加有效性检查）
+-- 12. 瞬移系统
 -- ============================================================
 function saveCurrentPos()
     local char = LocalPlayer.Character
     if not char then return end
     local root = char:FindFirstChild("HumanoidRootPart")
     if root then
-        Features.SavedPos = root.Position  -- 保留 Position 以兼容旧功能
+        Features.SavedPos = root.Position
         WindUI:Notify({ Title = "坐标已保存", Content = string.format("(%.1f, %.1f, %.1f)", root.Position.X, root.Position.Y, root.Position.Z), Duration = 2 })
     else
         WindUI:Notify({ Title = "错误", Content = "未找到 HumanoidRootPart", Duration = 2 })
@@ -1380,7 +1411,6 @@ end
 
 function teleportToInput(x, y, z)
     local pos = Vector3.new(tonumber(x) or 0, tonumber(y) or 0, tonumber(z) or 0)
-    -- 检查有效性
     if pos.Magnitude > 10000 then
         WindUI:Notify({ Title = "错误", Content = "坐标超出合理范围", Duration = 2 })
         return
@@ -1460,7 +1490,7 @@ function toggleTeleportLoop(enable)
 end
 
 -- ============================================================
--- 13. 配置导入/导出（序列化 Color3 和 Vector3）
+-- 13. 配置导入/导出
 -- ============================================================
 local function packValue(value)
     local t = typeof(value)
@@ -1535,10 +1565,10 @@ end
 -- 构建 WindUI 窗口（整合所有功能）
 -- ============================================================
 local Window = WindUI:CreateWindow({
-    Title = "综合学习辅助 (融合增强版)",
-    Icon = "book-open",
-    Author = "WindUI 融合版",
-    Folder = "LearnAux",
+    Title = "星光辅助 (修复版)",
+    Icon = "star",
+    Author = "修复整合",
+    Folder = "StarAux",
     Size = UDim2.fromOffset(780, 620),
     Transparent = false,
     Theme = "Dark",
@@ -1760,7 +1790,6 @@ end)
 -- ========== 瞬移标签页 ==========
 pcall(function()
     Tabs.Teleport:Section({ Title = "坐标管理" })
-    -- 先声明 updateCoordDisplay，再在按钮中使用
     local coordDesc = Tabs.Teleport:Paragraph({
         Title = "已保存坐标",
         Desc = "未保存",
@@ -1892,16 +1921,16 @@ end)
 
 -- ========== 窗口打开按钮 ==========
 Window:EditOpenButton({
-    Title = "打开辅助",
-    Icon = "shield",
+    Title = "打开星光辅助",
+    Icon = "star",
     CornerRadius = UDim.new(0, 12),
     StrokeThickness = 2,
-    Color = ColorSequence.new(Color3.fromHex("00FF87"), Color3.fromHex("60EFFF")),
+    Color = ColorSequence.new(Color3.fromHex("FFD700"), Color3.fromHex("FF8C00")),
     Draggable = true,
 })
 
 Window:Open()
-WindUI:Notify({ Title = "欢迎", Content = "融合增强版已加载，按 F 切换飞行，F1 开关UI", Duration = 5, Icon = "info" })
+WindUI:Notify({ Title = "欢迎使用星光辅助", Content = "修复版已加载，按 F 切换飞行，F1 开关UI", Duration = 5, Icon = "star" })
 
 -- 自动创建自瞄按钮
 task.wait(1)
@@ -1956,7 +1985,7 @@ local function cleanup()
     resetLighting()
     if aimButton and aimButton.Parent then aimButton.Parent:Destroy() end
     if fpsGui then fpsGui:Destroy() end
-    print("学习辅助已清理完成")
+    print("星光辅助已清理完成")
 end
 
 Players.PlayerRemoving:Connect(function(player)
