@@ -1,13 +1,10 @@
 -- ============================================================
--- 星光辅助 V2.0 · 融合 Ninja Hub 全部功能
+-- 星光辅助 V2.1 · 修复移动端标签页不显示问题
 -- ============================================================
 
--- 加载 WindUI
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
--- ============================================================
--- 1. 先注册金黄色主题（必须在创建窗口之前）
--- ============================================================
+-- 注册金黄色主题
 WindUI:AddTheme({
     Name = "StarGold",
     Accent = "#FFD700",
@@ -15,13 +12,8 @@ WindUI:AddTheme({
     Text = "#FFFFFF",
     Placeholder = "#A8A098",
 })
-
--- 应用主题
 WindUI:SetTheme("StarGold")
 
--- ============================================================
--- 服务与全局变量
--- ============================================================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -36,29 +28,19 @@ local Stats = game:GetService("Stats")
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 local player = LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
 
 local LoadStartTime = tick()
 
--- 金黄色配色（用于 UI 装饰）
+-- 金黄色配色
 local C = {
     Gold = Color3.fromRGB(255, 215, 0),
     GoldDark = Color3.fromRGB(184, 134, 11),
     GoldLight = Color3.fromRGB(255, 235, 150),
-    GoldDim = Color3.fromRGB(120, 100, 30),
-    Bg = Color3.fromRGB(12, 10, 18),
-    BgCard = Color3.fromRGB(20, 16, 30),
     Text = Color3.fromRGB(255, 255, 240),
     TextSub = Color3.fromRGB(200, 195, 180),
-    RowBg = Color3.fromRGB(30, 25, 40),
-    Btn = Color3.fromRGB(200, 170, 40),
-    BtnDark = Color3.fromRGB(140, 120, 30),
-    Val = Color3.fromRGB(100, 85, 25),
 }
 
--- ============================================================
 -- 角色引用
--- ============================================================
 local character, humanoid, hrp
 local function refreshCharacter()
     character = player.Character
@@ -126,12 +108,8 @@ local Features = {
     TimeOfDay = {Enabled = false, Value = 12},
     SitAnywhere = {Enabled = false},
     DangerWarning = {Enabled = false, Value = 50},
-    GameInfo = {Enabled = false},
 }
 
--- ============================================================
--- 连接与线程管理
--- ============================================================
 local Conns = {}
 local function bind(name, conn)
     if Conns[name] then Conns[name]:Disconnect() end
@@ -150,9 +128,7 @@ local ClickerThread, AntiAfkThread, AutoSaveThread, Fly1BtnY = 0, nil, nil, 0
 local ToggleRefreshers = {}
 local Updaters = {}
 
--- ============================================================
 -- 辅助函数
--- ============================================================
 local MoveStateNames = {"Climbing","FallingDown","Flying","Freefall","GettingUp","Jumping","Landed","Physics","PlatformStanding","Ragdoll","Running","RunningNoPhysics","Seated","StrafingNoPhysics","Swimming"}
 local function disableMovementStates(hum)
     if not hum then return end
@@ -273,7 +249,7 @@ function reapplyAllFeatures()
 end
 
 -- ============================================================
--- 渲染系统（移植自 Ninja Hub）
+-- 渲染系统（精简版）
 -- ============================================================
 local RenderFolder = Instance.new("Folder")
 RenderFolder.Name = "StarRender"; RenderFolder.Parent = CoreGui
@@ -521,10 +497,9 @@ local function clearRenderCache()
 end
 
 -- ============================================================
--- 音乐播放器
+-- 音乐播放器（仅保留核心，避免干扰）
 -- ============================================================
 local MusicDir = "/storage/emulated/0/Delta/StarMusic"
-local MusicDirRel = "StarMusic"
 local Music = {
     Open = false, List = {}, Idx = 1,
     Current = nil, Playing = false, Mode = 0,
@@ -540,18 +515,10 @@ end
 
 local function initMusicDir()
     Music.DirReady = false
-    local okAbs = pcall(function()
-        if not isfolder(MusicDir) then makefolder(MusicDir) end
-    end)
-    if okAbs then
-        local okList = pcall(function() local f = listfiles(MusicDir) return f end)
-        if okList then Music.DirReady = true return end
-    end
     pcall(function()
-        if not isfolder(MusicDirRel) then makefolder(MusicDirRel) end
+        if not isfolder(MusicDir) then makefolder(MusicDir) end
+        Music.DirReady = true
     end)
-    local okList = pcall(function() local f = listfiles(MusicDirRel) return f end)
-    if okList then Music.DirReady = true end
 end
 
 local function wavDuration(data)
@@ -623,12 +590,11 @@ end
 
 local function loadLocalSongs()
     Music.Scanning = true
-    musicToast("📂 扫描音乐文件夹...")
+    musicToast("📂 扫描音乐...")
     task.spawn(function()
         local songs = {}
         local files = {}
-        local okList = pcall(function() files = listfiles(MusicDir) end)
-        if not okList then pcall(function() files = listfiles(MusicDirRel) end) end
+        pcall(function() files = listfiles(MusicDir) end)
         local exts = {mp3 = true, wav = true, ogg = true, flac = true, aac = true, m4a = true}
         for _, f in ipairs(files) do
             local lower = tostring(f):lower()
@@ -636,23 +602,18 @@ local function loadLocalSongs()
             if ext and exts[ext] then
                 local base = f:match("([^/\\]+)$") or f
                 local pureName = base:gsub("%.[%w]+$", "")
-                local dur = nil
+                local dur = 180
                 if ext == "mp3" or ext == "wav" then
                     local okR, data = pcall(readfile, f)
                     if okR and data and #data > 128 then
-                        dur = (ext == "wav") and wavDuration(data) or mp3Duration(data)
+                        dur = (ext == "wav") and wavDuration(data) or mp3Duration(data) or 180
                     end
                 end
-                table.insert(songs, {path = f, name = pureName, ext = ext, dur = dur or 180})
+                table.insert(songs, {path = f, name = pureName, ext = ext, dur = dur})
             end
         end
         Music.List = songs
         Music.Idx = 1
-        if Music.Current and Music.Current.path then
-            for i, s in ipairs(songs) do
-                if s.path == Music.Current.path then Music.Idx = i break end
-            end
-        end
         Music.Scanning = false
         if #songs == 0 then
             musicToast("🎵 未找到歌曲！请放入: " .. MusicDir)
@@ -692,9 +653,7 @@ local function playSongAt(idx)
             if MusicTimer then task.cancel(MusicTimer) end
             local dur = math.max(s.dur or 180, 20)
             MusicTimer = task.delay(dur + 1.5, function()
-                if Music.Current == s and Music.Playing then
-                    onMusicEnd()
-                end
+                if Music.Current == s and Music.Playing then onMusicEnd() end
             end)
         else
             musicToast("⚠ 播放失败: " .. s.name)
@@ -714,12 +673,7 @@ local function onMusicEnd()
     if Music.Mode == 1 then
         playSongAt(Music.Idx)
     elseif Music.Mode == 2 then
-        if Music.Idx < #Music.List then
-            playSongAt(Music.Idx + 1)
-        else
-            stopMusic()
-            musicToast("✅ 播放列表已播完")
-        end
+        if Music.Idx < #Music.List then playSongAt(Music.Idx + 1) else stopMusic(); musicToast("✅ 播放列表已播完") end
     else
         playSongAt((Music.Idx % #Music.List) + 1)
     end
@@ -734,14 +688,14 @@ end
 
 local function updateMusicPlayBtn()
     if MusicPanel and MusicPanel:FindFirstChild("PlayBtn") then
-        MusicPanel.PlayBtn.Text = Music.Playing and "⏸ 停止" or "▶ 播放"
+        MusicPanel.PlayBtn.Text = Music.Playing and "⏸" or "▶"
         MusicPanel.PlayBtn.BackgroundColor3 = Music.Playing and C.GoldDark or C.Gold
     end
 end
 
 local function renderMusicList()
     if not MusicListFrame then return end
-    for _, c in ipairs(MusicListFrame:GetChildren()) do
+    for _, c in pairs(MusicListFrame:GetChildren()) do
         if c:IsA("TextButton") or c:IsA("Frame") then c:Destroy() end
     end
     local list = Music.List
@@ -750,7 +704,7 @@ local function renderMusicList()
         empty.Size = UDim2.new(1, 0, 0, 60)
         empty.Position = UDim2.new(0, 0, 0, 6)
         empty.BackgroundTransparency = 1
-        empty.Text = Music.Scanning and "📂 扫描中..." or "未找到歌曲\n请放入: " .. MusicDir
+        empty.Text = Music.Scanning and "📂 扫描中..." or "未找到歌曲"
         empty.TextColor3 = C.TextSub
         empty.TextSize = 10
         empty.Font = Enum.Font.Gotham
@@ -767,7 +721,6 @@ local function renderMusicList()
         row.BorderSizePixel = 0
         row.Parent = MusicListFrame
         local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0, 8); rc.Parent = row
-
         local playHit = Instance.new("TextButton")
         playHit.Size = UDim2.new(1, 0, 1, 0)
         playHit.BackgroundTransparency = 1
@@ -775,7 +728,6 @@ local function renderMusicList()
         playHit.AutoButtonColor = false
         playHit.Parent = row
         playHit.MouseButton1Click:Connect(function() playSongAt(i) end)
-
         local idxL = Instance.new("TextLabel")
         idxL.Size = UDim2.new(0, 22, 1, 0)
         idxL.Position = UDim2.new(0, 6, 0, 0)
@@ -786,9 +738,8 @@ local function renderMusicList()
         idxL.Font = Enum.Font.GothamBold
         idxL.TextXAlignment = Enum.TextXAlignment.Left
         idxL.Parent = row
-
         local nameL = Instance.new("TextLabel")
-        nameL.Size = UDim2.new(0, 215, 1, 0)
+        nameL.Size = UDim2.new(0, 180, 1, 0)
         nameL.Position = UDim2.new(0, 32, 0, 0)
         nameL.BackgroundTransparency = 1
         nameL.Text = s.name
@@ -798,10 +749,9 @@ local function renderMusicList()
         nameL.TextXAlignment = Enum.TextXAlignment.Left
         nameL.TextTruncate = Enum.TextTruncate.AtEnd
         nameL.Parent = row
-
         local durL = Instance.new("TextLabel")
-        durL.Size = UDim2.new(0, 58, 1, 0)
-        durL.Position = UDim2.new(1, -62, 0, 0)
+        durL.Size = UDim2.new(0, 50, 1, 0)
+        durL.Position = UDim2.new(1, -54, 0, 0)
         durL.BackgroundTransparency = 1
         durL.Text = fmtDur(s.dur)
         durL.TextColor3 = C.TextSub
@@ -809,86 +759,82 @@ local function renderMusicList()
         durL.Font = Enum.Font.Gotham
         durL.TextXAlignment = Enum.TextXAlignment.Right
         durL.Parent = row
-
         y = y + 32
     end
 end
 
--- ============================================================
--- 构建音乐播放器悬浮窗
--- ============================================================
 local function buildMusicPanel()
     local panel = Instance.new("Frame")
     panel.Name = "StarMusicPanel"
-    panel.Size = UDim2.new(0, 280, 0, 40)
-    panel.Position = UDim2.new(1, -290, 0.5, -200)
+    panel.Size = UDim2.new(0, 220, 0, 34)
+    panel.Position = UDim2.new(1, -230, 0.5, -150)
     panel.BackgroundColor3 = Color3.fromRGB(12, 10, 18)
-    panel.BackgroundTransparency = 0.12
+    panel.BackgroundTransparency = 0.15
     panel.BorderSizePixel = 0
     panel.Visible = false
     panel.ZIndex = 9450
     panel.Parent = CoreGui
-    local pc = Instance.new("UICorner"); pc.CornerRadius = UDim.new(0, 14); pc.Parent = panel
+    local pc = Instance.new("UICorner"); pc.CornerRadius = UDim.new(0, 12); pc.Parent = panel
     local stroke = Instance.new("UIStroke")
     stroke.Color = C.Gold
     stroke.Thickness = 2
-    stroke.Transparency = 0.6
+    stroke.Transparency = 0.5
     stroke.Parent = panel
 
     local titleBar = Instance.new("TextButton")
-    titleBar.Size = UDim2.new(1, 0, 0, 40)
+    titleBar.Size = UDim2.new(1, 0, 0, 34)
     titleBar.BackgroundTransparency = 1
     titleBar.Text = ""
     titleBar.AutoButtonColor = false
     titleBar.Parent = panel
 
     local titleText = Instance.new("TextLabel")
-    titleText.Size = UDim2.new(0.6, 0, 1, 0)
-    titleText.Position = UDim2.new(0, 10, 0, 0)
+    titleText.Size = UDim2.new(0.5, 0, 1, 0)
+    titleText.Position = UDim2.new(0, 8, 0, 0)
     titleText.BackgroundTransparency = 1
     titleText.Text = "🎵 星光音乐"
     titleText.TextColor3 = C.Gold
-    titleText.TextSize = 13
+    titleText.TextSize = 11
     titleText.Font = Enum.Font.GothamBold
     titleText.TextXAlignment = Enum.TextXAlignment.Left
     titleText.Parent = titleBar
 
     local playBtn = Instance.new("TextButton")
     playBtn.Name = "PlayBtn"
-    playBtn.Size = UDim2.new(0, 40, 0, 30)
-    playBtn.Position = UDim2.new(1, -110, 0.5, -15)
+    playBtn.Size = UDim2.new(0, 32, 0, 26)
+    playBtn.Position = UDim2.new(1, -76, 0.5, -13)
     playBtn.BackgroundColor3 = C.Gold
     playBtn.Text = "▶"
     playBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
-    playBtn.TextSize = 12
+    playBtn.TextSize = 11
     playBtn.Font = Enum.Font.GothamBold
     playBtn.Parent = titleBar
-    local pC = Instance.new("UICorner"); pC.CornerRadius = UDim.new(0, 8); pC.Parent = playBtn
+    local pC = Instance.new("UICorner"); pC.CornerRadius = UDim.new(0, 7); pC.Parent = playBtn
     panel.PlayBtn = playBtn
 
     local modeBtn = Instance.new("TextButton")
     modeBtn.Name = "ModeBtn"
-    modeBtn.Size = UDim2.new(0, 40, 0, 30)
-    modeBtn.Position = UDim2.new(1, -66, 0.5, -15)
+    modeBtn.Size = UDim2.new(0, 32, 0, 26)
+    modeBtn.Position = UDim2.new(1, -42, 0.5, -13)
     modeBtn.BackgroundColor3 = C.GoldDark
     modeBtn.Text = "🔁"
     modeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    modeBtn.TextSize = 12
+    modeBtn.TextSize = 11
     modeBtn.Font = Enum.Font.GothamBold
     modeBtn.Parent = titleBar
-    local mC = Instance.new("UICorner"); mC.CornerRadius = UDim.new(0, 8); mC.Parent = modeBtn
+    local mC = Instance.new("UICorner"); mC.CornerRadius = UDim.new(0, 7); mC.Parent = modeBtn
     panel.ModeBtn = modeBtn
 
     local closeBtn = Instance.new("TextButton")
-    closeBtn.Size = UDim2.new(0, 30, 0, 30)
-    closeBtn.Position = UDim2.new(1, -32, 0.5, -15)
+    closeBtn.Size = UDim2.new(0, 26, 0, 26)
+    closeBtn.Position = UDim2.new(1, -10, 0.5, -13)
     closeBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
     closeBtn.Text = "×"
     closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    closeBtn.TextSize = 14
+    closeBtn.TextSize = 12
     closeBtn.Font = Enum.Font.GothamBold
     closeBtn.Parent = titleBar
-    local cC = Instance.new("UICorner"); cC.CornerRadius = UDim.new(0, 8); cC.Parent = closeBtn
+    local cC = Instance.new("UICorner"); cC.CornerRadius = UDim.new(0, 7); cC.Parent = closeBtn
 
     playBtn.MouseButton1Click:Connect(function()
         if Music.Playing then stopMusic() else if Music.Current then playSongAt(Music.Idx) else musicToast("请先点击歌曲") end end
@@ -897,51 +843,38 @@ local function buildMusicPanel()
     closeBtn.MouseButton1Click:Connect(function()
         Features.MusicPlayer.Enabled = false
         panel.Visible = false
-        if ToggleRefreshers.MusicPlayer then ToggleRefreshers.MusicPlayer(false) end
     end)
 
     local open = false
     titleBar.MouseButton1Click:Connect(function()
         open = not open
         if open then
-            panel.Size = UDim2.new(0, 280, 0, 380)
+            panel.Size = UDim2.new(0, 220, 0, 320)
             panel.ClipsDescendants = true
         else
-            panel.Size = UDim2.new(0, 280, 0, 40)
+            panel.Size = UDim2.new(0, 220, 0, 34)
             panel.ClipsDescendants = true
         end
     end)
 
     local content = Instance.new("Frame")
-    content.Size = UDim2.new(1, -12, 0, 330)
-    content.Position = UDim2.new(0, 6, 0, 44)
+    content.Size = UDim2.new(1, -8, 0, 276)
+    content.Position = UDim2.new(0, 4, 0, 38)
     content.BackgroundTransparency = 1
     content.Parent = panel
 
-    local nowL = Instance.new("TextLabel")
-    nowL.Size = UDim2.new(1, 0, 0, 20)
-    nowL.BackgroundTransparency = 1
-    nowL.Text = "🎵 未播放"
-    nowL.TextColor3 = C.GoldLight
-    nowL.TextSize = 10
-    nowL.Font = Enum.Font.GothamBold
-    nowL.TextXAlignment = Enum.TextXAlignment.Left
-    nowL.TextTruncate = Enum.TextTruncate.AtEnd
-    nowL.Parent = content
-
     MusicListFrame = Instance.new("Frame")
-    MusicListFrame.Size = UDim2.new(1, 0, 0, 280)
-    MusicListFrame.Position = UDim2.new(0, 0, 0, 24)
+    MusicListFrame.Size = UDim2.new(1, 0, 0, 240)
     MusicListFrame.BackgroundColor3 = Color3.fromRGB(12, 8, 30)
     MusicListFrame.BackgroundTransparency = 0.2
     MusicListFrame.BorderSizePixel = 0
     MusicListFrame.ClipsDescendants = true
     MusicListFrame.Parent = content
-    local mlc = Instance.new("UICorner"); mlc.CornerRadius = UDim.new(0, 10); mlc.Parent = MusicListFrame
+    local mlc = Instance.new("UICorner"); mlc.CornerRadius = UDim.new(0, 8); mlc.Parent = MusicListFrame
 
     local refreshBtn = Instance.new("TextButton")
     refreshBtn.Size = UDim2.new(0, 50, 0, 22)
-    refreshBtn.Position = UDim2.new(0.5, 25, 1, -24)
+    refreshBtn.Position = UDim2.new(0.5, -25, 1, -26)
     refreshBtn.BackgroundColor3 = C.GoldDark
     refreshBtn.Text = "🔄 刷新"
     refreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -956,34 +889,7 @@ local function buildMusicPanel()
 end
 
 -- ============================================================
--- 构建 WindUI 窗口（必须用正确的方式）
--- ============================================================
-local Window = WindUI:CreateWindow({
-    Title = "星光辅助 · 融合版",
-    Icon = "star",
-    Author = "星光 · 移植 Ninja Hub",
-    Folder = "StarAux",
-    Size = UDim2.fromOffset(780, 620),
-    Transparent = false,
-    Theme = "StarGold",  -- 使用已注册的主题名
-    SideBarWidth = 200,
-    HasOutline = true,
-})
-
--- ============================================================
--- 标签页（全部正常创建）
--- ============================================================
-local Tabs = {
-    Movement = Window:Tab({ Title = "移动", Icon = "move" }),
-    Combat = Window:Tab({ Title = "战斗", Icon = "sword" }),
-    Visual = Window:Tab({ Title = "视觉", Icon = "eye" }),
-    Tools = Window:Tab({ Title = "工具", Icon = "wrench" }),
-    Character = Window:Tab({ Title = "人物", Icon = "user" }),
-    System = Window:Tab({ Title = "系统", Icon = "settings" }),
-}
-
--- ============================================================
--- 功能实现 (Updaters) - 精简版，保留核心逻辑
+-- 功能实现 Updaters（精简但完整）
 -- ============================================================
 
 Updaters.WalkSpeed = function()
@@ -1093,9 +999,9 @@ Updaters.Fly2 = function()
         Conns.Fly2 = RunService.Heartbeat:Connect(function(dt)
             if not hrp or not Features.Fly2.Flying then return end
             local speed = math.clamp(Features.Fly2.Value or 50, 1, 500)
-            local moveY = (Gui.Fly2Up and 1 or 0) + (Gui.Fly2Down and -1 or 0)
-            local moveX = (Gui.Fly2Right and 1 or 0) + (Gui.Fly2Left and -1 or 0)
-            local moveZ = (Gui.Fly2Forward and 1 or 0) + (Gui.Fly2Back and -1 or 0)
+            local moveY = (UserInputService:IsKeyDown(Enum.KeyCode.E) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.Q) and 1 or 0)
+            local moveX = (UserInputService:IsKeyDown(Enum.KeyCode.D) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.A) and 1 or 0)
+            local moveZ = (UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.S) and 1 or 0)
             local camCF = Camera.CFrame
             local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
             if forward.Magnitude < 0.01 then forward = Vector3.new(0, 0, -1) end
@@ -1136,9 +1042,9 @@ Updaters.FreeMove = function()
                 humanoid.PlatformStand = true
             end
             local speed = math.clamp(Features.FreeMove.Value or 50, 1, 500)
-            local moveZ = (Gui.FreeUp and 1 or 0) + (Gui.FreeDown and -1 or 0)
-            local moveX = (Gui.FreeRight and 1 or 0) + (Gui.FreeLeft and -1 or 0)
-            local moveY = (Gui.FreeFlyUp and 1 or 0) + (Gui.FreeFlyDown and -1 or 0)
+            local moveZ = (UserInputService:IsKeyDown(Enum.KeyCode.S) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.W) and 1 or 0)
+            local moveX = (UserInputService:IsKeyDown(Enum.KeyCode.D) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.A) and 1 or 0)
+            local moveY = (UserInputService:IsKeyDown(Enum.KeyCode.Space) and 1 or 0) - (UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and 1 or 0)
             local camCF = Camera.CFrame
             local rightVec = camCF.RightVector
             local forwardVec = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
@@ -1256,7 +1162,6 @@ Updaters.WallClimb = function()
     end
 end
 
--- 战斗
 Updaters.GodMode = function()
     if Features.GodMode.Enabled then
         if Conns.God then return end
@@ -1419,8 +1324,7 @@ Updaters.AutoFire = function()
             updateTargetCache()
             local targets = {}
             local ct = Features.AimbotV2.CustomTarget
-            if ct and ct.Parent then
-                table.insert(targets, ct)
+            if ct and ct.Parent then table.insert(targets, ct)
             else
                 if Features.AimbotV2.AimPlayer then
                     for _, e in ipairs(TargetCache.Players) do table.insert(targets, e.Obj) end
@@ -1435,10 +1339,7 @@ Updaters.AutoFire = function()
                     local sp, onScreen = Camera:WorldToViewportPoint(aimPart.Position)
                     if onScreen and sp.Z >= 0 then
                         local dist = (Vector2.new(sp.X, sp.Y) - center).Magnitude
-                        if dist <= radius then
-                            tryFireTool()
-                            break
-                        end
+                        if dist <= radius then tryFireTool(); break end
                     end
                 end
             end
@@ -1703,9 +1604,7 @@ Updaters.MusicPlayer = function()
         if not MusicPanel then buildMusicPanel() end
         MusicPanel.Visible = true
         initMusicDir()
-        if Music.DirReady and #Music.List == 0 then
-            loadLocalSongs()
-        end
+        if Music.DirReady and #Music.List == 0 then loadLocalSongs() end
     else
         if MusicPanel then MusicPanel.Visible = false end
     end
@@ -2066,11 +1965,10 @@ Updaters.AimbotV2 = function()
         AimClosest = nil
         AimScanTick = 0
         Conns.AimbotV2 = RunService.RenderStepped:Connect(function()
-            local csize = Features.AimbotV2.CircleSize
             AimScanTick = AimScanTick + 1
             if AimScanTick % 3 == 0 then
                 local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-                local radius = csize / 2
+                local radius = Features.AimbotV2.CircleSize / 2
                 local maxD = Features.AimbotV2.MaxDistance or 0
                 local best, bestDist = nil, math.huge
                 updateTargetCache()
@@ -2112,10 +2010,7 @@ Updaters.AimbotV2 = function()
                         local dist3 = (Camera.CFrame.Position - aimPos).Magnitude
                         aimPos = aimPos + aimPart.AssemblyLinearVelocity * (dist3 / 1000)
                     end
-                    if worldDist < bestDist then
-                        bestDist = worldDist
-                        best = aimPos
-                    end
+                    if worldDist < bestDist then bestDist = worldDist; best = aimPos end
                 end
                 AimClosest = best
             end
@@ -2307,8 +2202,6 @@ InfoLabel.Font = Enum.Font.GothamBold
 InfoLabel.Visible = false
 InfoLabel.ZIndex = 9350
 InfoLabel.Parent = CoreGui
-local ilC = Instance.new("UICorner"); ilC.CornerRadius = UDim.new(0, 10); ilC.Parent = InfoLabel
-local ilS = Instance.new("UIStroke"); ilS.Color = C.Gold; ilS.Thickness = 1.5; ilS.Transparency = 0.5; ilS.Parent = InfoLabel
 
 Updaters.ShowFps = function()
     if Features.ShowFps.Enabled then
@@ -2389,8 +2282,6 @@ WarnLabel.Font = Enum.Font.GothamBold
 WarnLabel.Visible = false
 WarnLabel.ZIndex = 9360
 WarnLabel.Parent = CoreGui
-local wlC = Instance.new("UICorner"); wlC.CornerRadius = UDim.new(0, 12); wlC.Parent = WarnLabel
-local wlS = Instance.new("UIStroke"); wlS.Color = Color3.fromRGB(255, 0, 0); wlS.Thickness = 2; wlS.Parent = WarnLabel
 
 Updaters.DangerWarning = function()
     if Features.DangerWarning.Enabled then
@@ -2423,194 +2314,178 @@ Updaters.DangerWarning = function()
     end
 end
 
+-- 灵动岛
+Updaters.DynamicIsland = function() end
+
 -- ============================================================
--- 构建 UI 标签页内容
+-- 使用 WindUI 的 Section 和 Toggle 构建 UI（不用 Tab）
 -- ============================================================
-
--- 移动标签页
-Tabs.Movement:Section({ Title = "基础移动" })
-Tabs.Movement:Toggle({ Title = "加速移动", Value = false, Callback = function(v) Features.WalkSpeed.Enabled = v; Updaters.WalkSpeed() end })
-Tabs.Movement:Slider({ Title = "移动速度", Value = { Min = 1, Max = 500, Default = 100 }, Callback = function(v) Features.WalkSpeed.Value = v end })
-Tabs.Movement:Toggle({ Title = "传送行走", Value = false, Callback = function(v) Features.TpWalk.Enabled = v; Updaters.TpWalk() end })
-Tabs.Movement:Slider({ Title = "传送距离", Value = { Min = 1, Max = 100, Default = 2 }, Callback = function(v) Features.TpWalk.Value = v end })
-Tabs.Movement:Toggle({ Title = "飞行模式 (快捷键 F)", Value = false, Callback = function(v) Features.Fly1.Enabled = v; Updaters.Fly1() end })
-Tabs.Movement:Slider({ Title = "飞行速度", Value = { Min = 1, Max = 500, Default = 45 }, Callback = function(v) Features.Fly1.Value = v end })
-Tabs.Movement:Toggle({ Title = "飞行模式2 (方向键控制)", Value = false, Callback = function(v) Features.Fly2.Enabled = v; Updaters.Fly2() end })
-Tabs.Movement:Slider({ Title = "飞行速度2", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.Fly2.Value = v end })
-Tabs.Movement:Toggle({ Title = "自由移动", Value = false, Callback = function(v) Features.FreeMove.Enabled = v; Updaters.FreeMove() end })
-Tabs.Movement:Slider({ Title = "自由移动速度", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.FreeMove.Value = v end })
-Tabs.Movement:Toggle({ Title = "穿墙 (NoClip)", Value = false, Callback = function(v) Features.Noclip.Enabled = v; Updaters.Noclip() end })
-Tabs.Movement:Toggle({ Title = "超级连跳", Value = false, Callback = function(v) Features.BunnyHop.Enabled = v; Updaters.BunnyHop() end })
-Tabs.Movement:Slider({ Title = "连跳增量", Value = { Min = 1, Max = 100, Default = 5 }, Callback = function(v) Features.BunnyHop.Value = v end })
-Tabs.Movement:Toggle({ Title = "跳高修改", Value = false, Callback = function(v) Features.JumpHeight.Enabled = v; Updaters.JumpHeight() end })
-Tabs.Movement:Slider({ Title = "跳跃高度", Value = { Min = 1, Max = 500, Default = 100 }, Callback = function(v) Features.JumpHeight.Value = v end })
-Tabs.Movement:Toggle({ Title = "自动奔跑", Value = false, Callback = function(v) Features.AutoRun.Enabled = v; Updaters.AutoRun() end })
-Tabs.Movement:Toggle({ Title = "超级跳跃", Value = false, Callback = function(v) Features.SuperJump.Enabled = v; Updaters.SuperJump() end })
-Tabs.Movement:Slider({ Title = "超级跳跃力度", Value = { Min = 1, Max = 500, Default = 200 }, Callback = function(v) Features.SuperJump.Value = v end })
-Tabs.Movement:Toggle({ Title = "爬墙模式", Value = false, Callback = function(v) Features.WallClimb.Enabled = v; Updaters.WallClimb() end })
-Tabs.Movement:Slider({ Title = "爬墙速度", Value = { Min = 1, Max = 200, Default = 50 }, Callback = function(v) Features.WallClimb.Value = v end })
-
--- 战斗标签页
-Tabs.Combat:Section({ Title = "战斗增强" })
-Tabs.Combat:Toggle({ Title = "无敌模式", Value = false, Callback = function(v) Features.GodMode.Enabled = v; Updaters.GodMode() end })
-Tabs.Combat:Toggle({ Title = "攻击无间隔", Value = false, Callback = function(v) Features.NoCooldown.Enabled = v; Updaters.NoCooldown() end })
-Tabs.Combat:Toggle({ Title = "无限子弹", Value = false, Callback = function(v) Features.InfiniteAmmo.Enabled = v; Updaters.InfiniteAmmo() end })
-Tabs.Combat:Toggle({ Title = "自动攻击", Value = false, Callback = function(v) Features.AutoAttack.Enabled = v; Updaters.AutoAttack() end })
-Tabs.Combat:Toggle({ Title = "杀戮光环", Value = false, Callback = function(v) Features.KillAura.Enabled = v; Updaters.KillAura() end })
-Tabs.Combat:Slider({ Title = "杀戮光环范围", Value = { Min = 1, Max = 100, Default = 20 }, Callback = function(v) Features.KillAura.Value = v end })
-Tabs.Combat:Toggle({ Title = "自动瞄准 (简单)", Value = false, Callback = function(v) Features.Aimbot.Enabled = v; Updaters.Aimbot() end })
-Tabs.Combat:Toggle({ Title = "快速射击", Value = false, Callback = function(v) Features.RapidFire.Enabled = v; Updaters.RapidFire() end })
-Tabs.Combat:Toggle({ Title = "自动开火", Value = false, Callback = function(v) Features.AutoFire.Enabled = v; Updaters.AutoFire() end })
-
--- 视觉标签页
-Tabs.Visual:Section({ Title = "环境效果" })
-Tabs.Visual:Toggle({ Title = "夜视模式", Value = false, Callback = function(v) Features.NightVision.Enabled = v; Updaters.NightVision() end })
-Tabs.Visual:Toggle({ Title = "全亮模式", Value = false, Callback = function(v) Features.FullBright.Enabled = v; Updaters.FullBright() end })
-Tabs.Visual:Toggle({ Title = "玩家透视 (ESP)", Value = false, Callback = function(v) Features.ESP.Enabled = v; Updaters.ESP() end })
-Tabs.Visual:Toggle({ Title = "地图透视 (X光)", Value = false, Callback = function(v) Features.Xray.Enabled = v; Updaters.Xray() end })
-Tabs.Visual:Toggle({ Title = "清除迷雾", Value = false, Callback = function(v) Features.NoFog.Enabled = v; Updaters.NoFog() end })
-Tabs.Visual:Toggle({ Title = "颜色滤镜", Value = false, Callback = function(v) Features.ColorFilter.Enabled = v; Updaters.ColorFilter() end })
-Tabs.Visual:Dropdown({
-    Title = "滤镜颜色",
-    Values = {"Red", "Blue", "Green", "Pink", "Yellow", "Cyan"},
-    Value = "Pink",
-    Callback = function(v) Features.ColorFilter.Value = v end
+local Window = WindUI:CreateWindow({
+    Title = "星光辅助 · 融合版",
+    Icon = "star",
+    Author = "星光 · 移植 Ninja Hub",
+    Folder = "StarAux",
+    Size = UDim2.fromOffset(400, 520),
+    Transparent = false,
+    Theme = "StarGold",
+    SideBarWidth = 0,
+    HasOutline = true,
 })
-Tabs.Visual:Toggle({ Title = "自由视角", Value = false, Callback = function(v) Features.FreeCam.Enabled = v; Updaters.FreeCam() end })
-Tabs.Visual:Toggle({ Title = "热能透视", Value = false, Callback = function(v) Features.ThermalESP.Enabled = v; Updaters.ThermalESP() end })
 
--- 工具标签页
-Tabs.Tools:Section({ Title = "实用工具" })
-Tabs.Tools:Toggle({ Title = "🎵 音乐播放器", Value = false, Callback = function(v)
-    Features.MusicPlayer.Enabled = v
-    Updaters.MusicPlayer()
-    if v then
-        WindUI:Notify({Title = "🎵 音乐播放器", Content = "已开启，点击屏幕右侧金色悬浮窗", Duration = 3})
+-- 用下拉菜单切换分类
+local categories = {
+    "移动",
+    "战斗",
+    "视觉",
+    "工具",
+    "人物",
+    "系统"
+}
+
+local currentCategory = "移动"
+local contentContainer = nil
+
+-- 创建分类切换下拉
+Window:Section({ Title = "分类导航" })
+Window:Dropdown({
+    Title = "选择功能分类",
+    Values = categories,
+    Value = "移动",
+    Callback = function(v)
+        currentCategory = v
+        rebuildContent()
     end
-end })
-Tabs.Tools:Toggle({ Title = "连点器", Value = false, Callback = function(v) Features.AutoClicker.Enabled = v; Updaters.AutoClicker() end })
-Tabs.Tools:Slider({ Title = "连点间隔 (ms)", Value = { Min = 1, Max = 5000, Default = 10 }, Callback = function(v) Features.AutoClicker.Value = v end })
-Tabs.Tools:Toggle({ Title = "连点启动", Value = false, Callback = function(v) Features.ClickerStart.Enabled = v; Updaters.ClickerStart() end })
-Tabs.Tools:Toggle({ Title = "多球模式", Value = false, Callback = function(v) Features.ClickerMulti.Enabled = v; Updaters.ClickerMulti() end })
-Tabs.Tools:Toggle({ Title = "快速交互", Value = false, Callback = function(v) Features.FastInteract.Enabled = v; Updaters.FastInteract() end })
-Tabs.Tools:Toggle({ Title = "自动保存配置", Value = false, Callback = function(v) Features.AutoSave.Enabled = v; Updaters.AutoSave() end })
-Tabs.Tools:Toggle({ Title = "反AFK", Value = false, Callback = function(v) Features.AntiAfk.Enabled = v; Updaters.AntiAfk() end })
-
--- 人物标签页
-Tabs.Character:Section({ Title = "NPC 显示" })
-Tabs.Character:Toggle({ Title = "启用 NPC 显示", Value = false, Callback = function(v) Features.NpcDisplay.Enabled = v; Updaters.NpcDisplay() end })
-Tabs.Character:Toggle({ Title = "显示头部", Value = true, Callback = function(v) Features.NpcDisplay.ShowHead = v end })
-Tabs.Character:Toggle({ Title = "显示身体", Value = true, Callback = function(v) Features.NpcDisplay.ShowTorso = v end })
-Tabs.Character:Toggle({ Title = "显示四肢", Value = true, Callback = function(v) Features.NpcDisplay.ShowLimbs = v end })
-Tabs.Character:Toggle({ Title = "显示骨骼", Value = true, Callback = function(v) Features.NpcDisplay.ShowBones = v end })
-
-Tabs.Character:Section({ Title = "玩家显示" })
-Tabs.Character:Toggle({ Title = "启用玩家显示", Value = false, Callback = function(v) Features.PlayerDisplay.Enabled = v; Updaters.PlayerDisplay() end })
-Tabs.Character:Toggle({ Title = "显示头部", Value = true, Callback = function(v) Features.PlayerDisplay.ShowHead = v end })
-Tabs.Character:Toggle({ Title = "显示身体", Value = true, Callback = function(v) Features.PlayerDisplay.ShowTorso = v end })
-Tabs.Character:Toggle({ Title = "显示四肢", Value = true, Callback = function(v) Features.PlayerDisplay.ShowLimbs = v end })
-Tabs.Character:Toggle({ Title = "显示骨骼", Value = true, Callback = function(v) Features.PlayerDisplay.ShowBones = v end })
-Tabs.Character:Toggle({ Title = "显示名字", Value = true, Callback = function(v) Features.PlayerDisplay.ShowName = v end })
-Tabs.Character:Toggle({ Title = "显示距离", Value = true, Callback = function(v) Features.PlayerDisplay.ShowDistance = v end })
-Tabs.Character:Toggle({ Title = "显示血量", Value = true, Callback = function(v) Features.PlayerDisplay.ShowHealth = v end })
-
-Tabs.Character:Section({ Title = "框选生物" })
-Tabs.Character:Toggle({ Title = "启用框选", Value = false, Callback = function(v) Features.BoxCreature.Enabled = v; Updaters.BoxCreature() end })
-Tabs.Character:Toggle({ Title = "框选NPC", Value = true, Callback = function(v) Features.BoxCreature.BoxNpc = v end })
-Tabs.Character:Toggle({ Title = "框选玩家", Value = true, Callback = function(v) Features.BoxCreature.BoxPlayer = v end })
-Tabs.Character:Toggle({ Title = "框选其他", Value = true, Callback = function(v) Features.BoxCreature.BoxOther = v end })
-Tabs.Character:Toggle({ Title = "显示碰撞箱", Value = false, Callback = function(v) Features.BoxCreature.ShowHitbox = v end })
-Tabs.Character:Dropdown({
-    Title = "框选模式",
-    Values = {"3D", "2D"},
-    Value = "3D",
-    Callback = function(v) Features.BoxCreature.BoxMode = v end
 })
-Tabs.Character:Slider({ Title = "最大距离 (0=无限)", Value = { Min = 0, Max = 5000, Default = 0 }, Callback = function(v) Features.BoxCreature.MaxDistance = v end })
 
-Tabs.Character:Section({ Title = "连线追踪" })
-Tabs.Character:Toggle({ Title = "启用连线", Value = false, Callback = function(v) Features.LineConnect.Enabled = v; Updaters.LineConnect() end })
-Tabs.Character:Toggle({ Title = "连接玩家", Value = true, Callback = function(v) Features.LineConnect.ConnectPlayer = v end })
-Tabs.Character:Toggle({ Title = "连接NPC", Value = false, Callback = function(v) Features.LineConnect.ConnectNpc = v end })
-Tabs.Character:Toggle({ Title = "连接其他", Value = false, Callback = function(v) Features.LineConnect.ConnectOther = v end })
-Tabs.Character:Toggle({ Title = "检测墙体", Value = false, Callback = function(v) Features.LineConnect.LineWallCheck = v end })
-Tabs.Character:Dropdown({
-    Title = "线起点",
-    Values = {"Top", "Bottom", "Cross"},
-    Value = "Top",
-    Callback = function(v) Features.LineConnect.Origin = v end
-})
-Tabs.Character:Slider({ Title = "最大距离 (0=无限)", Value = { Min = 0, Max = 5000, Default = 0 }, Callback = function(v) Features.LineConnect.MaxDistance = v end })
+-- 创建内容容器（动态刷新）
+local function rebuildContent()
+    if contentContainer then
+        contentContainer:Destroy()
+    end
+    contentContainer = Window:Section({ Title = currentCategory .. " · 功能列表" })
 
-Tabs.Character:Section({ Title = "智能自瞄 V2" })
-Tabs.Character:Toggle({ Title = "启用智能自瞄", Value = false, Callback = function(v) Features.AimbotV2.Enabled = v; Updaters.AimbotV2() end })
-Tabs.Character:Toggle({ Title = "自瞄玩家", Value = true, Callback = function(v) Features.AimbotV2.AimPlayer = v end })
-Tabs.Character:Toggle({ Title = "自瞄NPC", Value = false, Callback = function(v) Features.AimbotV2.AimNpc = v end })
-Tabs.Character:Toggle({ Title = "自瞄其他", Value = false, Callback = function(v) Features.AimbotV2.AimOther = v end })
-Tabs.Character:Toggle({ Title = "检测墙体", Value = false, Callback = function(v) Features.AimbotV2.WallCheck = v end })
-Tabs.Character:Toggle({ Title = "同队跳过", Value = false, Callback = function(v) Features.AimbotV2.TeamCheck = v end })
-Tabs.Character:Toggle({ Title = "平滑瞄准", Value = true, Callback = function(v) Features.AimbotV2.Smooth = v end })
-Tabs.Character:Toggle({ Title = "预判自瞄", Value = false, Callback = function(v) Features.AimbotV2.Predict = v end })
-Tabs.Character:Dropdown({
-    Title = "瞄准部位",
-    Values = {"Head", "HumanoidRootPart", "Torso", "UpperTorso", "LowerTorso"},
-    Value = "Head",
-    Callback = function(v) Features.AimbotV2.AimPart = v end
-})
-Tabs.Character:Slider({ Title = "圆圈大小", Value = { Min = 50, Max = 500, Default = 150 }, Callback = function(v) Features.AimbotV2.CircleSize = v end })
-Tabs.Character:Slider({ Title = "瞄准速度", Value = { Min = 0.02, Max = 0.9, Default = 0.3 }, Callback = function(v) Features.AimbotV2.AimSpeed = v end })
-Tabs.Character:Slider({ Title = "最大距离 (0=无限)", Value = { Min = 0, Max = 5000, Default = 0 }, Callback = function(v) Features.AimbotV2.MaxDistance = v end })
+    if currentCategory == "移动" then
+        contentContainer:Toggle({ Title = "加速移动", Value = false, Callback = function(v) Features.WalkSpeed.Enabled = v; Updaters.WalkSpeed() end })
+        contentContainer:Slider({ Title = "移动速度", Value = { Min = 1, Max = 500, Default = 100 }, Callback = function(v) Features.WalkSpeed.Value = v end })
+        contentContainer:Toggle({ Title = "传送行走", Value = false, Callback = function(v) Features.TpWalk.Enabled = v; Updaters.TpWalk() end })
+        contentContainer:Slider({ Title = "传送距离", Value = { Min = 1, Max = 100, Default = 2 }, Callback = function(v) Features.TpWalk.Value = v end })
+        contentContainer:Toggle({ Title = "飞行模式 (F键)", Value = false, Callback = function(v) Features.Fly1.Enabled = v; Updaters.Fly1() end })
+        contentContainer:Slider({ Title = "飞行速度", Value = { Min = 1, Max = 500, Default = 45 }, Callback = function(v) Features.Fly1.Value = v end })
+        contentContainer:Toggle({ Title = "飞行模式2 (WASD+EQ)", Value = false, Callback = function(v) Features.Fly2.Enabled = v; Updaters.Fly2() end })
+        contentContainer:Slider({ Title = "飞行速度2", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.Fly2.Value = v end })
+        contentContainer:Toggle({ Title = "自由移动", Value = false, Callback = function(v) Features.FreeMove.Enabled = v; Updaters.FreeMove() end })
+        contentContainer:Slider({ Title = "自由移动速度", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.FreeMove.Value = v end })
+        contentContainer:Toggle({ Title = "穿墙 (NoClip)", Value = false, Callback = function(v) Features.Noclip.Enabled = v; Updaters.Noclip() end })
+        contentContainer:Toggle({ Title = "超级连跳", Value = false, Callback = function(v) Features.BunnyHop.Enabled = v; Updaters.BunnyHop() end })
+        contentContainer:Slider({ Title = "连跳增量", Value = { Min = 1, Max = 100, Default = 5 }, Callback = function(v) Features.BunnyHop.Value = v end })
+        contentContainer:Toggle({ Title = "跳高修改", Value = false, Callback = function(v) Features.JumpHeight.Enabled = v; Updaters.JumpHeight() end })
+        contentContainer:Slider({ Title = "跳跃高度", Value = { Min = 1, Max = 500, Default = 100 }, Callback = function(v) Features.JumpHeight.Value = v end })
+        contentContainer:Toggle({ Title = "自动奔跑", Value = false, Callback = function(v) Features.AutoRun.Enabled = v; Updaters.AutoRun() end })
+        contentContainer:Toggle({ Title = "超级跳跃", Value = false, Callback = function(v) Features.SuperJump.Enabled = v; Updaters.SuperJump() end })
+        contentContainer:Slider({ Title = "超级跳跃力度", Value = { Min = 1, Max = 500, Default = 200 }, Callback = function(v) Features.SuperJump.Value = v end })
+        contentContainer:Toggle({ Title = "爬墙模式", Value = false, Callback = function(v) Features.WallClimb.Enabled = v; Updaters.WallClimb() end })
+        contentContainer:Slider({ Title = "爬墙速度", Value = { Min = 1, Max = 200, Default = 50 }, Callback = function(v) Features.WallClimb.Value = v end })
 
-Tabs.Character:Section({ Title = "高级透视" })
-Tabs.Character:Toggle({ Title = "启用高级透视", Value = false, Callback = function(v) Features.AdvancedESP.Enabled = v; Updaters.AdvancedESP() end })
-Tabs.Character:Toggle({ Title = "显示方框", Value = true, Callback = function(v) Features.AdvancedESP.ShowBox = v end })
-Tabs.Character:Toggle({ Title = "显示名字", Value = true, Callback = function(v) Features.AdvancedESP.ShowName = v end })
-Tabs.Character:Toggle({ Title = "显示血量", Value = true, Callback = function(v) Features.AdvancedESP.ShowHealth = v end })
-Tabs.Character:Toggle({ Title = "显示距离", Value = true, Callback = function(v) Features.AdvancedESP.ShowDistance = v end })
-Tabs.Character:Toggle({ Title = "骨骼线", Value = false, Callback = function(v) Features.AdvancedESP.Skeleton = v end })
-Tabs.Character:Toggle({ Title = "追踪线", Value = false, Callback = function(v) Features.AdvancedESP.Tracer = v end })
-Tabs.Character:Toggle({ Title = "上色渲染", Value = true, Callback = function(v) Features.AdvancedESP.ShowChams = v end })
-Tabs.Character:Toggle({ Title = "同队跳过", Value = false, Callback = function(v) Features.AdvancedESP.TeamCheck = v end })
-Tabs.Character:Toggle({ Title = "检测墙体", Value = false, Callback = function(v) Features.AdvancedESP.WallCheck = v end })
-Tabs.Character:Dropdown({
-    Title = "方框样式",
-    Values = {"Corner", "Full"},
-    Value = "Corner",
-    Callback = function(v) Features.AdvancedESP.BoxStyle = v end
-})
-Tabs.Character:Dropdown({
-    Title = "血条样式",
-    Values = {"Bar", "Text", "Both"},
-    Value = "Bar",
-    Callback = function(v) Features.AdvancedESP.HealthStyle = v end
-})
-Tabs.Character:Slider({ Title = "最大距离 (0=无限)", Value = { Min = 0, Max = 5000, Default = 300 }, Callback = function(v) Features.AdvancedESP.MaxDistance = v end })
+    elseif currentCategory == "战斗" then
+        contentContainer:Toggle({ Title = "无敌模式", Value = false, Callback = function(v) Features.GodMode.Enabled = v; Updaters.GodMode() end })
+        contentContainer:Toggle({ Title = "攻击无间隔", Value = false, Callback = function(v) Features.NoCooldown.Enabled = v; Updaters.NoCooldown() end })
+        contentContainer:Toggle({ Title = "无限子弹", Value = false, Callback = function(v) Features.InfiniteAmmo.Enabled = v; Updaters.InfiniteAmmo() end })
+        contentContainer:Toggle({ Title = "自动攻击", Value = false, Callback = function(v) Features.AutoAttack.Enabled = v; Updaters.AutoAttack() end })
+        contentContainer:Toggle({ Title = "杀戮光环", Value = false, Callback = function(v) Features.KillAura.Enabled = v; Updaters.KillAura() end })
+        contentContainer:Slider({ Title = "杀戮光环范围", Value = { Min = 1, Max = 100, Default = 20 }, Callback = function(v) Features.KillAura.Value = v end })
+        contentContainer:Toggle({ Title = "自动瞄准 (简单)", Value = false, Callback = function(v) Features.Aimbot.Enabled = v; Updaters.Aimbot() end })
+        contentContainer:Toggle({ Title = "快速射击", Value = false, Callback = function(v) Features.RapidFire.Enabled = v; Updaters.RapidFire() end })
+        contentContainer:Toggle({ Title = "自动开火", Value = false, Callback = function(v) Features.AutoFire.Enabled = v; Updaters.AutoFire() end })
 
--- 系统标签页
-Tabs.System:Section({ Title = "系统设置" })
-Tabs.System:Toggle({ Title = "灵动岛模式", Value = true, Callback = function(v) Features.DynamicIsland.Enabled = v; Updaters.DynamicIsland() end })
-Tabs.System:Toggle({ Title = "显示 FPS", Value = false, Callback = function(v) Features.ShowFps.Enabled = v; Updaters.ShowFps() end })
-Tabs.System:Toggle({ Title = "显示坐标", Value = false, Callback = function(v) Features.ShowCoords.Enabled = v; Updaters.ShowCoords() end })
-Tabs.System:Toggle({ Title = "重力修改", Value = false, Callback = function(v) Features.GravityMod.Enabled = v; Updaters.GravityMod() end })
-Tabs.System:Slider({ Title = "重力值", Value = { Min = 0, Max = 1000, Default = 50 }, Callback = function(v) Features.GravityMod.Value = v end })
-Tabs.System:Toggle({ Title = "时间修改", Value = false, Callback = function(v) Features.TimeOfDay.Enabled = v; Updaters.TimeOfDay() end })
-Tabs.System:Slider({ Title = "时间 (小时)", Value = { Min = 0, Max = 24, Default = 12 }, Callback = function(v) Features.TimeOfDay.Value = v end })
-Tabs.System:Toggle({ Title = "随处坐下 (按 X)", Value = false, Callback = function(v) Features.SitAnywhere.Enabled = v; Updaters.SitAnywhere() end })
-Tabs.System:Toggle({ Title = "危险警告", Value = false, Callback = function(v) Features.DangerWarning.Enabled = v; Updaters.DangerWarning() end })
-Tabs.System:Slider({ Title = "警告距离", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.DangerWarning.Value = v end })
+    elseif currentCategory == "视觉" then
+        contentContainer:Toggle({ Title = "夜视模式", Value = false, Callback = function(v) Features.NightVision.Enabled = v; Updaters.NightVision() end })
+        contentContainer:Toggle({ Title = "全亮模式", Value = false, Callback = function(v) Features.FullBright.Enabled = v; Updaters.FullBright() end })
+        contentContainer:Toggle({ Title = "玩家透视 (ESP)", Value = false, Callback = function(v) Features.ESP.Enabled = v; Updaters.ESP() end })
+        contentContainer:Toggle({ Title = "地图透视 (X光)", Value = false, Callback = function(v) Features.Xray.Enabled = v; Updaters.Xray() end })
+        contentContainer:Toggle({ Title = "清除迷雾", Value = false, Callback = function(v) Features.NoFog.Enabled = v; Updaters.NoFog() end })
+        contentContainer:Toggle({ Title = "颜色滤镜", Value = false, Callback = function(v) Features.ColorFilter.Enabled = v; Updaters.ColorFilter() end })
+        contentContainer:Dropdown({ Title = "滤镜颜色", Values = {"Red","Blue","Green","Pink","Yellow","Cyan"}, Value = "Pink", Callback = function(v) Features.ColorFilter.Value = v end })
+        contentContainer:Toggle({ Title = "自由视角", Value = false, Callback = function(v) Features.FreeCam.Enabled = v; Updaters.FreeCam() end })
+        contentContainer:Toggle({ Title = "热能透视", Value = false, Callback = function(v) Features.ThermalESP.Enabled = v; Updaters.ThermalESP() end })
 
--- 灵动岛开关
-Updaters.DynamicIsland = function()
-    if Features.DynamicIsland.Enabled then
-        -- 启用灵动岛模式（WindUI 的打开按钮已经实现类似效果）
+    elseif currentCategory == "工具" then
+        contentContainer:Toggle({ Title = "🎵 音乐播放器", Value = false, Callback = function(v)
+            Features.MusicPlayer.Enabled = v
+            Updaters.MusicPlayer()
+            if v then WindUI:Notify({Title = "🎵 音乐播放器", Content = "已开启，点击右侧金色悬浮窗", Duration = 3}) end
+        end })
+        contentContainer:Toggle({ Title = "连点器", Value = false, Callback = function(v) Features.AutoClicker.Enabled = v; Updaters.AutoClicker() end })
+        contentContainer:Slider({ Title = "连点间隔 (ms)", Value = { Min = 1, Max = 5000, Default = 10 }, Callback = function(v) Features.AutoClicker.Value = v end })
+        contentContainer:Toggle({ Title = "连点启动", Value = false, Callback = function(v) Features.ClickerStart.Enabled = v; Updaters.ClickerStart() end })
+        contentContainer:Toggle({ Title = "多球模式", Value = false, Callback = function(v) Features.ClickerMulti.Enabled = v; Updaters.ClickerMulti() end })
+        contentContainer:Toggle({ Title = "快速交互", Value = false, Callback = function(v) Features.FastInteract.Enabled = v; Updaters.FastInteract() end })
+        contentContainer:Toggle({ Title = "自动保存配置", Value = false, Callback = function(v) Features.AutoSave.Enabled = v; Updaters.AutoSave() end })
+        contentContainer:Toggle({ Title = "反AFK", Value = false, Callback = function(v) Features.AntiAfk.Enabled = v; Updaters.AntiAfk() end })
+
+    elseif currentCategory == "人物" then
+        contentContainer:Toggle({ Title = "启用 NPC 显示", Value = false, Callback = function(v) Features.NpcDisplay.Enabled = v; Updaters.NpcDisplay() end })
+        contentContainer:Toggle({ Title = "NPC:头部", Value = true, Callback = function(v) Features.NpcDisplay.ShowHead = v end })
+        contentContainer:Toggle({ Title = "NPC:身体", Value = true, Callback = function(v) Features.NpcDisplay.ShowTorso = v end })
+        contentContainer:Toggle({ Title = "NPC:四肢", Value = true, Callback = function(v) Features.NpcDisplay.ShowLimbs = v end })
+        contentContainer:Toggle({ Title = "NPC:骨骼", Value = true, Callback = function(v) Features.NpcDisplay.ShowBones = v end })
+        contentContainer:Toggle({ Title = "启用玩家显示", Value = false, Callback = function(v) Features.PlayerDisplay.Enabled = v; Updaters.PlayerDisplay() end })
+        contentContainer:Toggle({ Title = "玩家:头部", Value = true, Callback = function(v) Features.PlayerDisplay.ShowHead = v end })
+        contentContainer:Toggle({ Title = "玩家:身体", Value = true, Callback = function(v) Features.PlayerDisplay.ShowTorso = v end })
+        contentContainer:Toggle({ Title = "玩家:四肢", Value = true, Callback = function(v) Features.PlayerDisplay.ShowLimbs = v end })
+        contentContainer:Toggle({ Title = "玩家:骨骼", Value = true, Callback = function(v) Features.PlayerDisplay.ShowBones = v end })
+        contentContainer:Toggle({ Title = "玩家:名字", Value = true, Callback = function(v) Features.PlayerDisplay.ShowName = v end })
+        contentContainer:Toggle({ Title = "玩家:距离", Value = true, Callback = function(v) Features.PlayerDisplay.ShowDistance = v end })
+        contentContainer:Toggle({ Title = "玩家:血量", Value = true, Callback = function(v) Features.PlayerDisplay.ShowHealth = v end })
+        contentContainer:Toggle({ Title = "启用框选", Value = false, Callback = function(v) Features.BoxCreature.Enabled = v; Updaters.BoxCreature() end })
+        contentContainer:Toggle({ Title = "框选NPC", Value = true, Callback = function(v) Features.BoxCreature.BoxNpc = v end })
+        contentContainer:Toggle({ Title = "框选玩家", Value = true, Callback = function(v) Features.BoxCreature.BoxPlayer = v end })
+        contentContainer:Toggle({ Title = "显示碰撞箱", Value = false, Callback = function(v) Features.BoxCreature.ShowHitbox = v end })
+        contentContainer:Dropdown({ Title = "框选模式", Values = {"3D","2D"}, Value = "3D", Callback = function(v) Features.BoxCreature.BoxMode = v end })
+        contentContainer:Slider({ Title = "框选最大距离", Value = { Min = 0, Max = 5000, Default = 0 }, Callback = function(v) Features.BoxCreature.MaxDistance = v end })
+        contentContainer:Toggle({ Title = "启用连线", Value = false, Callback = function(v) Features.LineConnect.Enabled = v; Updaters.LineConnect() end })
+        contentContainer:Toggle({ Title = "连接玩家", Value = true, Callback = function(v) Features.LineConnect.ConnectPlayer = v end })
+        contentContainer:Toggle({ Title = "连接NPC", Value = false, Callback = function(v) Features.LineConnect.ConnectNpc = v end })
+        contentContainer:Dropdown({ Title = "线起点", Values = {"Top","Bottom","Cross"}, Value = "Top", Callback = function(v) Features.LineConnect.Origin = v end })
+        contentContainer:Toggle({ Title = "启用智能自瞄", Value = false, Callback = function(v) Features.AimbotV2.Enabled = v; Updaters.AimbotV2() end })
+        contentContainer:Toggle({ Title = "自瞄玩家", Value = true, Callback = function(v) Features.AimbotV2.AimPlayer = v end })
+        contentContainer:Toggle({ Title = "自瞄NPC", Value = false, Callback = function(v) Features.AimbotV2.AimNpc = v end })
+        contentContainer:Toggle({ Title = "检测墙体", Value = false, Callback = function(v) Features.AimbotV2.WallCheck = v end })
+        contentContainer:Toggle({ Title = "平滑瞄准", Value = true, Callback = function(v) Features.AimbotV2.Smooth = v end })
+        contentContainer:Dropdown({ Title = "瞄准部位", Values = {"Head","HumanoidRootPart","Torso"}, Value = "Head", Callback = function(v) Features.AimbotV2.AimPart = v end })
+        contentContainer:Slider({ Title = "圆圈大小", Value = { Min = 50, Max = 500, Default = 150 }, Callback = function(v) Features.AimbotV2.CircleSize = v end })
+        contentContainer:Slider({ Title = "瞄准速度", Value = { Min = 0.02, Max = 0.9, Default = 0.3 }, Callback = function(v) Features.AimbotV2.AimSpeed = v end })
+        contentContainer:Toggle({ Title = "启用高级透视", Value = false, Callback = function(v) Features.AdvancedESP.Enabled = v; Updaters.AdvancedESP() end })
+        contentContainer:Toggle({ Title = "显示方框", Value = true, Callback = function(v) Features.AdvancedESP.ShowBox = v end })
+        contentContainer:Toggle({ Title = "显示名字", Value = true, Callback = function(v) Features.AdvancedESP.ShowName = v end })
+        contentContainer:Toggle({ Title = "显示血量", Value = true, Callback = function(v) Features.AdvancedESP.ShowHealth = v end })
+        contentContainer:Toggle({ Title = "显示距离", Value = true, Callback = function(v) Features.AdvancedESP.ShowDistance = v end })
+        contentContainer:Toggle({ Title = "骨骼线", Value = false, Callback = function(v) Features.AdvancedESP.Skeleton = v end })
+        contentContainer:Toggle({ Title = "追踪线", Value = false, Callback = function(v) Features.AdvancedESP.Tracer = v end })
+        contentContainer:Toggle({ Title = "上色渲染", Value = true, Callback = function(v) Features.AdvancedESP.ShowChams = v end })
+        contentContainer:Dropdown({ Title = "方框样式", Values = {"Corner","Full"}, Value = "Corner", Callback = function(v) Features.AdvancedESP.BoxStyle = v end })
+        contentContainer:Dropdown({ Title = "血条样式", Values = {"Bar","Text","Both"}, Value = "Bar", Callback = function(v) Features.AdvancedESP.HealthStyle = v end })
+
+    elseif currentCategory == "系统" then
+        contentContainer:Toggle({ Title = "显示 FPS", Value = false, Callback = function(v) Features.ShowFps.Enabled = v; Updaters.ShowFps() end })
+        contentContainer:Toggle({ Title = "显示坐标", Value = false, Callback = function(v) Features.ShowCoords.Enabled = v; Updaters.ShowCoords() end })
+        contentContainer:Toggle({ Title = "重力修改", Value = false, Callback = function(v) Features.GravityMod.Enabled = v; Updaters.GravityMod() end })
+        contentContainer:Slider({ Title = "重力值", Value = { Min = 0, Max = 1000, Default = 50 }, Callback = function(v) Features.GravityMod.Value = v end })
+        contentContainer:Toggle({ Title = "时间修改", Value = false, Callback = function(v) Features.TimeOfDay.Enabled = v; Updaters.TimeOfDay() end })
+        contentContainer:Slider({ Title = "时间 (小时)", Value = { Min = 0, Max = 24, Default = 12 }, Callback = function(v) Features.TimeOfDay.Value = v end })
+        contentContainer:Toggle({ Title = "随处坐下 (按 X)", Value = false, Callback = function(v) Features.SitAnywhere.Enabled = v; Updaters.SitAnywhere() end })
+        contentContainer:Toggle({ Title = "危险警告", Value = false, Callback = function(v) Features.DangerWarning.Enabled = v; Updaters.DangerWarning() end })
+        contentContainer:Slider({ Title = "警告距离", Value = { Min = 1, Max = 500, Default = 50 }, Callback = function(v) Features.DangerWarning.Value = v end })
     end
 end
 
+-- 首次构建
+rebuildContent()
+
 -- ============================================================
--- 快捷键绑定
+-- 快捷键
 -- ============================================================
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
     if input.KeyCode == Enum.KeyCode.F then
         if not UserInputService:GetFocusedTextBox() then
             Features.Fly1.Enabled = not Features.Fly1.Enabled
@@ -2621,14 +2496,12 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 -- ============================================================
--- 加载完成
+-- 启动
 -- ============================================================
 local elapsed = tick() - LoadStartTime
 
--- 创建音乐面板
 buildMusicPanel()
 
--- 应用已开启的功能
 for key, state in pairs(Features) do
     if type(state) == "table" and state.Enabled and Updaters[key] then
         pcall(Updaters[key])
@@ -2637,16 +2510,16 @@ end
 
 Window:Open()
 WindUI:Notify({
-    Title = "✨ 星光辅助 V2.0",
-    Content = string.format("融合 Ninja Hub 全部功能 | 加载 %.2fs\n按 F 切换飞行", elapsed),
+    Title = "✨ 星光辅助 V2.1",
+    Content = string.format("加载 %.2fs | 下拉菜单切换分类 | F键飞行", elapsed),
     Duration = 5,
     Icon = "star"
 })
 
-print(string.format("[星光辅助] 加载完成 | 耗时 %.2fs | 金黄色主题", elapsed))
+print(string.format("[星光辅助] 加载完成 | 耗时 %.2fs", elapsed))
 
 -- ============================================================
--- 清理函数
+-- 清理
 -- ============================================================
 local function cleanup()
     for name in pairs(Conns) do unbind(name) end
